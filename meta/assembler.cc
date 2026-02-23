@@ -1022,7 +1022,7 @@ int assembler::bridge_circ(vector<bundle*> gv)
 		bundle &bd = *(gv[k]);
 		vector<pereads_cluster> vc;
 		vector<pereads_cluster> vc_circ;
-		graph_cluster gc(gr, bd, cfg.max_reads_partition_gap, true); //store hits true tasfia
+		graph_cluster gc(gr, bd, cfg.max_reads_partition_gap, false); //store hits true tasfia
 		
 		gc.build_pereads_clusters(vc);
 		gc.build_pereads_clusters_circ(vc_circ);
@@ -1078,6 +1078,9 @@ int assembler::bridge_circ(vector<bundle*> gv)
 			pereads_cluster vc_circ = vc[i]; //one frag in each cluster
 			if(vc_circ.is_circ == false) continue;
 
+			int circ_hit1_index = bd.circ_frgs[vc_circ.frlist[0]][0];
+			int circ_hit2_index = bd.circ_frgs[vc_circ.frlist[0]][1];
+
 			vector<int32_t> vc_circ_bridge_chain = bs.opt[i].chain; //chain index and vc index corr to same peread and its bridged chain
 
 			bool partner_found = false;
@@ -1088,230 +1091,228 @@ int assembler::bridge_circ(vector<bundle*> gv)
 				pereads_cluster vc_reg = vc[j]; //multiple frags in each cluster
 				vector<int32_t> vc_reg_bridge_chain = bs.opt[j].chain;
 				
-				for(int k=0;k<vc_reg.hits1.size();k++)
+				for(int k=0;k<vc_reg.frlist.size();k++)
 				{
-					hit &h1 = vc_reg.hits1[k];
-					hit &h2 = vc_reg.hits2[k];
-					// h1.print();
-					// h2.print();
-					if(h1.suppl == NULL) continue;
-					if(h1.qname != vc_circ.hits2[0].qname) continue;
-					printf("meta joined circRNA H1 has supple, read:%s\n",h1.qname.c_str());
-					h1.print();
-					h2.print();
-					h1.suppl->print();
-					// printf("joined circRNA bridge path H1 supple:\n");
-					// printf("vc_reg_chain1:\n");
-					// printv(vc_reg.chain1); // any merging function?
-					// printf("vc_reg_bridge_chain:\n");
-					// printv(vc_reg_bridge_chain);
-					// printf("vc_reg_chain2:\n");
-					// printv(vc_reg.chain2);
-					// printf("vc_circ_bridge_chain:\n");
-					// printv(vc_circ_bridge_chain);
-					// printf("vc_circ_chain2:\n");
-					// printv(vc_circ.chain2);
+					int reg_hit1_index = bd.frgs[vc_reg.frlist[k]][0];
+					int reg_hit2_index = bd.frgs[vc_reg.frlist[k]][1];
 
-					vector<int32_t> x,y,z,final_intron_chain;
-					merge_intron_chains(vc_reg.chain1, vc_reg_bridge_chain, x);
-					merge_intron_chains(x, vc_reg.chain2, y);
-					merge_intron_chains(y, vc_circ_bridge_chain, z);
-					merge_intron_chains(z, vc_circ.chain2, final_intron_chain);
+					hit &h1 = bd.hits[reg_hit1_index];
+					hit &h2 = bd.hits[reg_hit2_index];
 
-					printf("meta final intron chain H1 supple, read %s:\n",h1.qname.c_str());
-					printv(final_intron_chain);
-
-					//store circRNA
-					circular_transcript circ;
-					circ.sid = bd.sp.sample_id;
-					circ.chrm = bd.chrm;
-					circ.start = h1.pos;
-					circ.end = h1.suppl->rpos;
-					circ.id = bd.chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
-					circ.source = "circMeta_meta";
-					circ.feature = "circRNA";
-					circ.score = 1;
-					circ.coverage = 1;
-					circ.strand = bd.strand;
-					circ.gene_id = "gene_id";
-					circ.transcript_id = h1.qname;
-					circ.exon_count = final_intron_chain.size()/2 + 1;
-					circ.intron_chain = final_intron_chain;
-					
-					// mylock.lock();
-					// circ_trsts.push_back(circ);
-					// mylock.unlock();
-
-					partner_found = true;
-					// check meta partially bridged
-					int circ_frag_idx = vc_circ.frlist[0];
-					int reg_frag_idx = vc_reg.frlist[k];
-					if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] > 0)
+					if(h1.suppl != NULL && h1.qname == bd.hits[circ_hit2_index].qname)
 					{
-						printf("meta circrna H1 suppl formed, both bridged, chrm:%s, read:%s, final intron chain\n",bd.chrm.c_str(),circ.transcript_id.c_str());
+						// if(h1.suppl == NULL) continue;
+						// if(h1.qname != vc_circ.hits2[0].qname) continue;
+						printf("meta joined circRNA H1 has supple, read:%s\n",h1.qname.c_str());
+						h1.print();
+						h2.print();
+						h1.suppl->print();
+						// printf("joined circRNA bridge path H1 supple:\n");
+						// printf("vc_reg_chain1:\n");
+						// printv(vc_reg.chain1); // any merging function?
+						// printf("vc_reg_bridge_chain:\n");
+						// printv(vc_reg_bridge_chain);
+						// printf("vc_reg_chain2:\n");
+						// printv(vc_reg.chain2);
+						// printf("vc_circ_bridge_chain:\n");
+						// printv(vc_circ_bridge_chain);
+						// printf("vc_circ_chain2:\n");
+						// printv(vc_circ.chain2);
+
+						vector<int32_t> x,y,z,final_intron_chain;
+						merge_intron_chains(vc_reg.chain1, vc_reg_bridge_chain, x);
+						merge_intron_chains(x, vc_reg.chain2, y);
+						merge_intron_chains(y, vc_circ_bridge_chain, z);
+						merge_intron_chains(z, vc_circ.chain2, final_intron_chain);
+
+						printf("meta final intron chain H1 supple, read %s:\n",h1.qname.c_str());
 						printv(final_intron_chain);
 
-						auto it = all_unbridged_candidate_trsts.find(circ.transcript_id);
-						if (it != all_unbridged_candidate_trsts.end())
+						//store circRNA
+						circular_transcript circ;
+						circ.sid = bd.sp.sample_id;
+						circ.chrm = bd.chrm;
+						circ.start = h1.pos;
+						circ.end = h1.suppl->rpos;
+						circ.id = bd.chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
+						circ.source = "circMeta_meta";
+						circ.feature = "circRNA";
+						circ.score = 1;
+						circ.coverage = 1;
+						circ.strand = bd.strand;
+						circ.gene_id = "gene_id";
+						circ.transcript_id = h1.qname;
+						circ.exon_count = final_intron_chain.size()/2 + 1;
+						circ.intron_chain = final_intron_chain;
+						circ.h1_suppl = true;
+
+						// check meta partially bridged
+						int circ_frag_idx = vc_circ.frlist[0];
+						int reg_frag_idx = vc_reg.frlist[k];
+
+						if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] > 0)
 						{
-							// Key exists
-							circular_transcript &unbridged_circ = it->second;
-							printf("existing circ read:%s\n",unbridged_circ.transcript_id.c_str());
-							printf("exisiting unbridged type: %d\n",unbridged_circ.frag_bridged_type);
-							if(unbridged_circ.h1_suppl == true) printf("existing h1 has supple\n");
-							else printf("exisiting h2 has supple\n");
-							printf("existing unbridged intron chain:");
-							printv(unbridged_circ.intron_chain);
-							if(final_intron_chain.size() > unbridged_circ.intron_chain.size())
+							printf("meta circrna H1 suppl formed, both bridged, chrm:%s, read:%s, final intron chain\n",bd.chrm.c_str(),circ.transcript_id.c_str());
+							printv(final_intron_chain);
+
+							auto it = all_unbridged_candidate_trsts.find(circ.transcript_id);
+							if (it != all_unbridged_candidate_trsts.end())
 							{
-								printf("meta bridge larger than existing circ\n");
+								// Key exists
+								circular_transcript &unbridged_circ = it->second;
+								printf("existing circ read:%s\n",unbridged_circ.transcript_id.c_str());
+								printf("exisiting unbridged type: %d\n",unbridged_circ.frag_bridged_type);
+								if(unbridged_circ.h1_suppl == true) printf("existing h1 has supple\n");
+								else printf("exisiting h2 has supple\n");
+								printf("existing unbridged intron chain:");
+								printv(unbridged_circ.intron_chain);
+								if(final_intron_chain.size() > unbridged_circ.intron_chain.size())
+								{
+									printf("meta bridge larger than existing circ\n");
+								}
+								if(final_intron_chain.size() >= unbridged_circ.intron_chain.size())
+								{
+									mylock.lock();
+									circ_trsts.push_back(circ);
+									mylock.unlock();
+								}
 							}
-							if(final_intron_chain.size() >= unbridged_circ.intron_chain.size())
+							else
 							{
 								mylock.lock();
 								circ_trsts.push_back(circ);
 								mylock.unlock();
 							}
+							// circ.frag_bridged_type = 1;
+							// circ_trsts.push_back(circ);
+						}
+						else if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] <= 0)
+						{
+							printf("meta circRNA H1 suppl formed, circ frag bridged but reg frag unbridged, read:%s\n",circ.transcript_id.c_str());
+							// circ.frag_bridged_type = 2;
+							// unbridged_candidate_trsts[h1.qname] = circ;
+						}
+						else if(bd.circ_frgs[circ_frag_idx][2] <= 0 && bd.frgs[reg_frag_idx][2] > 0)
+						{
+							printf("meta circRNA H1 suppl formed, circ frag unbridged but reg frag bridged, read:%s\n",circ.transcript_id.c_str());
+							// circ.frag_bridged_type = 3;
+							// unbridged_candidate_trsts[h1.qname] = circ;
 						}
 						else
 						{
-							mylock.lock();
-							circ_trsts.push_back(circ);
-							mylock.unlock();
+							printf("meta circRNA H1 suppl formed, both unbridged, read:%s\n",circ.transcript_id.c_str());
 						}
-						// circ.frag_bridged_type = 1;
-						// circ_trsts.push_back(circ);
+						partner_found = true;
+						break;
 					}
-					else if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] <= 0)
+					else if(h2.suppl != NULL && h2.qname == bd.hits[circ_hit1_index].qname)
 					{
-						printf("meta circRNA H1 suppl formed, circ frag bridged but reg frag unbridged, read:%s\n",circ.transcript_id.c_str());
-						// circ.frag_bridged_type = 2;
-						// unbridged_candidate_trsts[h1.qname] = circ;
-					}
-					else if(bd.circ_frgs[circ_frag_idx][2] <= 0 && bd.frgs[reg_frag_idx][2] > 0)
-					{
-						printf("meta circRNA H1 suppl formed, circ frag unbridged but reg frag bridged, read:%s\n",circ.transcript_id.c_str());
-						// circ.frag_bridged_type = 3;
-						// unbridged_candidate_trsts[h1.qname] = circ;
-					}
-					else
-					{
-						printf("meta circRNA H1 suppl formed, both unbridged, read:%s\n",circ.transcript_id.c_str());
-					}
-					break;
-				}
+						// if(h2.suppl == NULL) continue;
+						// if(h2.qname != vc_circ.hits1[0].qname) continue;
+						printf("meta joined circRNA H2 has supple, read:%s\n",h2.qname.c_str());
+						h2.suppl->print();
+						h1.print();
+						h2.print();
+						// printf("joined circRNA bridge path H2 supple:\n");
+						// printf("vc_circ_chain1:\n");
+						// printv(vc_circ.chain1);
+						// printf("vc_circ_bridge_chain:\n");
+						// printv(vc_circ_bridge_chain);
+						// printf("vc_reg_chain1:\n");
+						// printv(vc_reg.chain1);
+						// printf("vc_reg_bridge_chain:\n");
+						// printv(vc_reg_bridge_chain);
+						// printf("vc_reg_chain2:\n");
+						// printv(vc_reg.chain2);
 
-				for(int k=0;k<vc_reg.hits2.size();k++)
-				{
-					hit &h1 = vc_reg.hits1[k];
-					hit &h2 = vc_reg.hits2[k];
-					if(h2.suppl == NULL) continue;
-					if(h2.qname != vc_circ.hits1[0].qname) continue;
-					printf("meta joined circRNA H2 has supple, read:%s\n",h2.qname.c_str());
-					h2.suppl->print();
-					h1.print();
-					h2.print();
-					// printf("joined circRNA bridge path H2 supple:\n");
-					// printf("vc_circ_chain1:\n");
-					// printv(vc_circ.chain1);
-					// printf("vc_circ_bridge_chain:\n");
-					// printv(vc_circ_bridge_chain);
-					// printf("vc_reg_chain1:\n");
-					// printv(vc_reg.chain1);
-					// printf("vc_reg_bridge_chain:\n");
-					// printv(vc_reg_bridge_chain);
-					// printf("vc_reg_chain2:\n");
-					// printv(vc_reg.chain2);
+						vector<int32_t> x,y,z,final_intron_chain;
+						merge_intron_chains(vc_circ.chain1, vc_circ_bridge_chain, x);
+						merge_intron_chains(x, vc_reg.chain1, y);
+						merge_intron_chains(y, vc_reg_bridge_chain, z);
+						merge_intron_chains(z, vc_reg.chain2, final_intron_chain);
 
-					vector<int32_t> x,y,z,final_intron_chain;
-					merge_intron_chains(vc_circ.chain1, vc_circ_bridge_chain, x);
-					merge_intron_chains(x, vc_reg.chain1, y);
-					merge_intron_chains(y, vc_reg_bridge_chain, z);
-					merge_intron_chains(z, vc_reg.chain2, final_intron_chain);
-
-					printf("meta final intron chain H2 supple, read %s:\n",h2.qname.c_str());
-					printv(final_intron_chain);
-
-					//store circRNA
-					circular_transcript circ;
-					circ.sid = bd.sp.sample_id;
-					circ.chrm = bd.chrm;
-					circ.start = h2.suppl->pos;
-					circ.end = h2.rpos;
-					circ.id = bd.chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
-					circ.source = "circMeta_meta";
-					circ.feature = "circRNA";
-					circ.score = 1;
-					circ.coverage = 1;
-					circ.strand = bd.strand;
-					circ.gene_id = "gene_id";
-					circ.transcript_id = h2.qname;
-					circ.exon_count = final_intron_chain.size()/2 + 1;
-					circ.intron_chain = final_intron_chain;
-					
-					// mylock.lock();
-					// circ_trsts.push_back(circ);
-					// mylock.unlock();
-
-					partner_found = true;
-					// check meta partially bridged
-					int circ_frag_idx = vc_circ.frlist[0];
-					int reg_frag_idx = vc_reg.frlist[k];
-					if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] > 0)
-					{
-						printf("meta circrna H2 suppl formed, both bridged, chrm:%s, read:%s, final intron chain\n",bd.chrm.c_str(),circ.transcript_id.c_str());
+						printf("meta final intron chain H2 supple, read %s:\n",h2.qname.c_str());
 						printv(final_intron_chain);
 
-						auto it = all_unbridged_candidate_trsts.find(circ.transcript_id);
-						if (it != all_unbridged_candidate_trsts.end())
+						//store circRNA
+						circular_transcript circ;
+						circ.sid = bd.sp.sample_id;
+						circ.chrm = bd.chrm;
+						circ.start = h2.suppl->pos;
+						circ.end = h2.rpos;
+						circ.id = bd.chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
+						circ.source = "circMeta_meta";
+						circ.feature = "circRNA";
+						circ.score = 1;
+						circ.coverage = 1;
+						circ.strand = bd.strand;
+						circ.gene_id = "gene_id";
+						circ.transcript_id = h2.qname;
+						circ.exon_count = final_intron_chain.size()/2 + 1;
+						circ.intron_chain = final_intron_chain;
+						circ.h1_suppl = false;
+
+						// check meta partially bridged
+						int circ_frag_idx = vc_circ.frlist[0];
+						int reg_frag_idx = vc_reg.frlist[k];
+
+						if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] > 0)
 						{
-							// Key exists
-							circular_transcript &unbridged_circ = it->second;
-							printf("existing circ read:%s\n",unbridged_circ.transcript_id.c_str());
-							printf("exisiting unbridged type: %d\n",unbridged_circ.frag_bridged_type);
-							if(unbridged_circ.h1_suppl == true) printf("existing h1 has supple\n");
-							else printf("exisiting h2 has supple\n");
-							printf("existing unbridged intron chain:");
-							printv(unbridged_circ.intron_chain);
-							if(final_intron_chain.size() > unbridged_circ.intron_chain.size())
+							printf("meta circrna H2 suppl formed, both bridged, chrm:%s, read:%s, final intron chain\n",bd.chrm.c_str(),circ.transcript_id.c_str());
+							printv(final_intron_chain);
+
+							auto it = all_unbridged_candidate_trsts.find(circ.transcript_id);
+							if (it != all_unbridged_candidate_trsts.end())
 							{
-								printf("meta bridge larger than existing circ\n");
+								// Key exists
+								circular_transcript &unbridged_circ = it->second;
+								printf("existing circ read:%s\n",unbridged_circ.transcript_id.c_str());
+								printf("exisiting unbridged type: %d\n",unbridged_circ.frag_bridged_type);
+								if(unbridged_circ.h1_suppl == true) printf("existing h1 has supple\n");
+								else printf("exisiting h2 has supple\n");
+								printf("existing unbridged intron chain:");
+								printv(unbridged_circ.intron_chain);
+								if(final_intron_chain.size() > unbridged_circ.intron_chain.size())
+								{
+									printf("meta bridge larger than existing circ\n");
+								}
+								if(final_intron_chain.size() >= unbridged_circ.intron_chain.size())
+								{
+									mylock.lock();
+									circ_trsts.push_back(circ);
+									mylock.unlock();
+								}
 							}
-							if(final_intron_chain.size() >= unbridged_circ.intron_chain.size())
+							else
 							{
 								mylock.lock();
 								circ_trsts.push_back(circ);
 								mylock.unlock();
 							}
+							// circ.frag_bridged_type = 1;
+							// circ_trsts.push_back(circ);
+						}
+						else if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] <= 0)
+						{
+							printf("meta circRNA H2 suppl formed, circ frag bridged but reg frag unbridged, read:%s\n",circ.transcript_id.c_str());
+							// circ.frag_bridged_type = 2;
+							// unbridged_candidate_trsts[h1.qname] = circ;
+						}
+						else if(bd.circ_frgs[circ_frag_idx][2] <= 0 && bd.frgs[reg_frag_idx][2] > 0)
+						{
+							printf("meta circRNA H2 suppl formed, circ frag unbridged but reg frag bridged, read:%s\n",circ.transcript_id.c_str());
+							// circ.frag_bridged_type = 3;
+							// unbridged_candidate_trsts[h1.qname] = circ;
 						}
 						else
 						{
-							mylock.lock();
-							circ_trsts.push_back(circ);
-							mylock.unlock();
+							printf("meta circRNA H2 suppl formed, both unbridged, read:%s\n",circ.transcript_id.c_str());
 						}
-						// circ.frag_bridged_type = 1;
-						// circ_trsts.push_back(circ);
+						partner_found = true;
+						break;
 					}
-					else if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] <= 0)
-					{
-						printf("meta circRNA H2 suppl formed, circ frag bridged but reg frag unbridged, read:%s\n",circ.transcript_id.c_str());
-						// circ.frag_bridged_type = 2;
-						// unbridged_candidate_trsts[h1.qname] = circ;
-					}
-					else if(bd.circ_frgs[circ_frag_idx][2] <= 0 && bd.frgs[reg_frag_idx][2] > 0)
-					{
-						printf("meta circRNA H2 suppl formed, circ frag unbridged but reg frag bridged, read:%s\n",circ.transcript_id.c_str());
-						// circ.frag_bridged_type = 3;
-						// unbridged_candidate_trsts[h1.qname] = circ;
-					}
-					else
-					{
-						printf("meta circRNA H2 suppl formed, both unbridged, read:%s\n",circ.transcript_id.c_str());
-					}
-					break;
-				}
-				if(partner_found == true) break;
+					if(partner_found == true) break;
+				}				
 			}
 		}
 		printf("assembler circ trsts size after meta assembly:%lu\n",circ_trsts.size());
