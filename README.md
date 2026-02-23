@@ -1,4 +1,4 @@
-[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/aletsch/README.html)
+<!-- [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/aletsch/README.html)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/aletsch/badges/downloads.svg)](https://anaconda.org/bioconda/aletsch)
 
 # Introduction
@@ -104,4 +104,4 @@ python3 score.py -i <individual_gtf_dir> -m <pretrained_model.joblib> -c <num_of
 | -p        | String  | 0.2     | Minimum probability score threshold (range: 0 to 1).         |
 | -o        | String  |         | Output directory of scored .csv file.                        |
 
-Assuming a collection of $n$ samples, the directory `<individual_gtf_dir>` contains a total of $n+1$ feature files, enumerated from `0.trstFeature.csv` through to `n.trstFeature.csv`. Files `0.trstFeature.csv` to `(n-1).trstFeature.csv` correspond to feature files for individual samples, sequentially from the first to the last sample. The file `n.trstFeature.csv` is derived from the **combined graph**.
+Assuming a collection of $n$ samples, the directory `<individual_gtf_dir>` contains a total of $n+1$ feature files, enumerated from `0.trstFeature.csv` through to `n.trstFeature.csv`. Files `0.trstFeature.csv` to `(n-1).trstFeature.csv` correspond to feature files for individual samples, sequentially from the first to the last sample. The file `n.trstFeature.csv` is derived from the **combined graph**. -->
