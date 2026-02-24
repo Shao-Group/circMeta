@@ -48,7 +48,8 @@ public:
 	int bridge(vector<bundle*> gv);
 	int combine_bundles(bundle &bd, vector<bundle*> gv);
 
-	int bridge_circ(vector<bundle*> gv);
+	int bridge_circ(vector<bundle*> gv); //meta bridging regular and circ fragments for circrna
+	int bridge_circ_optimized(vector<bundle*> gv);
 
     //sample support
     //int junction_support(int sample_id, splice_graph &gr, splice_graph &gx);

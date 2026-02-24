@@ -48,6 +48,7 @@ public:
 	int set_chimeric_cigar_positions(); //setting h.first_pos/second_pos etc for getting back splice positions using cigars
 	int build_circ_fragments();	//for building r2 and r1.supple frags
 	int bridge_circ(); //bridging regular and circ fragments for circrna
+	int bridge_circ_optimized();
 };
 
 #endif

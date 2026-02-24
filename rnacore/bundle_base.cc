@@ -78,26 +78,6 @@ int bundle_base::add_hit(const hit &ht)
 		if(p.pos == ht.pos && p.rpos == ht.rpos && p.mpos == ht.mpos)
 		// if(p.pos == ht.pos && p.rpos == ht.rpos)
 		{
-			if(ht.qname == "E00512:127:HJNF3ALXX:3:1211:7405:50568")
-			{
-				printf("E00512:127:HJNF3ALXX:3:1211:7405:50568 matches last added hit\n");
-				printf("E00512:127:HJNF3ALXX:3:1211:7405:50568 last added hit name:%s, pos:%d, rpos:%d\n",p.qname.c_str(),p.pos,p.rpos);
-			}
-			if(ht.qname == "E00512:127:HJNF3ALXX:2:1216:6045:38157")
-			{
-				printf("E00512:127:HJNF3ALXX:2:1216:6045:38157 matches last added hit\n");
-				printf("E00512:127:HJNF3ALXX:2:1216:6045:38157 last added hit name:%s, pos:%d, rpos:%d\n",p.qname.c_str(),p.pos,p.rpos);
-			}
-			if(ht.qname == "E00512:127:HJNF3ALXX:1:2113:31680:47228")
-			{
-				printf("E00512:127:HJNF3ALXX:1:2113:31680:47228 matches last added hit\n");
-				printf("E00512:127:HJNF3ALXX:1:2113:31680:47228 last added hit name:%s, pos:%d, rpos:%d\n",p.qname.c_str(),p.pos,p.rpos);
-			}
-			if(ht.qname == "E00512:127:HJNF3ALXX:1:2111:27255:46947")
-			{
-				printf("E00512:127:HJNF3ALXX:1:2111:27255:46947 matches last added hit\n");
-				printf("E00512:127:HJNF3ALXX:1:2111:27255:46947 last added hit name:%s, pos:%d, rpos:%d\n",p.qname.c_str(),p.pos,p.rpos);
-			}
 			return -1;
 		}
 	}
@@ -464,14 +444,15 @@ int bundle_base::update_bridges_circ(const vector<int> &frlist, const vector<int
 
 		int k = frlist[i];
 
-		if(circ_frgs[k][2] != 0)
-		{
-			printf("circ frgs type not zero, type is %d, read:%s",circ_frgs[k][2],hits[circ_frgs[k][0]].qname.c_str());
-		}
 		assert(circ_frgs[k][2] == 0);
 
 		hit &h1 = hits[circ_frgs[k][0]];
 		hit &h2 = hits[circ_frgs[k][1]];
+
+		if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+		{
+			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 enter in update bridges circ\n");
+		}
 		
 		assert(h1.hid >= 0);
 		assert(h2.hid >= 0);
@@ -482,13 +463,31 @@ int bundle_base::update_bridges_circ(const vector<int> &frlist, const vector<int
 		v1.insert(v1.end(), chain.begin(), chain.end());
 		v1.push_back(h2.pos);
 
+		if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+		{
+			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 printing chain in update bridges\n");
+			printv(chain);
+			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 printing v1 in update bridges\n");
+			printv(v1);
+		}
+
 		if(h1.rpos < h2.pos && check_increasing_sequence(v1) == false) continue; //check tasfia
+
+		if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+		{
+			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 passed check increasing seq\n");
+		}
+
 
 		cnt++;
 
 		if(chain.size() <= 0)
 		{
 			circ_frgs[k][2] = 1;
+			if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+			{
+				printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 circ frg type marked 1\n");
+			}
 		}
 		else
 		{
@@ -508,6 +507,11 @@ int bundle_base::update_bridges_circ(const vector<int> &frlist, const vector<int
 			//if(ss != '.' && s != '.' && s != ss) printf("warning: ss and s does not agree\n");
 
 			circ_frgs[k][2] = 2;
+
+			if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+			{
+				printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 circ frg type marked 2\n");
+			}
 
 			// if(s == ss)
 			// {

@@ -235,47 +235,10 @@ int bundle::build_supplementaries()
 	{
 		const hit &h = hits[i];
 
-		if(h.qname == "E00512:127:HJNF3ALXX:3:1211:7405:50568")
-		{
-			printf("E00512:127:HJNF3ALXX:3:1211:7405:50568 exists\n");
-		}
-		if(h.qname == "E00512:127:HJNF3ALXX:2:1216:6045:38157")
-		{
-			printf("E00512:127:HJNF3ALXX:2:1216:6045:38157 exists\n");
-		}
-		if(h.qname == "E00512:127:HJNF3ALXX:1:2113:31680:47228")
-		{
-			printf("E00512:127:HJNF3ALXX:1:2113:31680:47228 exists\n");
-		}
-		if(h.qname == "E00512:127:HJNF3ALXX:1:2111:27255:46947")
-		{
-			printf("E00512:127:HJNF3ALXX:1:2111:27255:46947 exists\n");
-		}
-
 		if(h.hid < 0) continue;
 		if((h.flag & 0x800) == 0) continue; //skip non supplementary
 
-		if(h.qname == "E00512:127:HJNF3ALXX:3:1211:7405:50568")
-		{
-			printf("E00512:127:HJNF3ALXX:3:1211:7405:50568 supple exists\n");
-		}
-		if(h.qname == "E00512:127:HJNF3ALXX:2:1216:6045:38157")
-		{
-			printf("E00512:127:HJNF3ALXX:2:1216:6045:38157 supple exists\n");
-		}
-		if(h.qname == "E00512:127:HJNF3ALXX:1:2113:31680:47228")
-		{
-			printf("E00512:127:HJNF3ALXX:1:2113:31680:47228 supple exists\n");
-		}
-		if(h.qname == "E00512:127:HJNF3ALXX:1:2111:27255:46947")
-		{
-			printf("E00512:127:HJNF3ALXX:1:2111:27255:46947 supple exists\n");
-		}
-
-		// int k = (h.get_qhash() % max_index + h.pos % max_index + (0 - h.isize) % max_index) % max_index;
 		int k = (h.get_qhash() % max_index + (h.flag & 0x40) + (h.flag & 0x80)) % max_index;
-		// int k = (h.get_qhash() % max_index + h.mpos % max_index + (0 - h.isize) % max_index) % max_index;
-		
 		vv[k].push_back(i);
 	}
 
@@ -286,14 +249,7 @@ int bundle::build_supplementaries()
 		if(h.hid < 0) continue;
 		if((h.flag & 0x800) >= 1) continue;  // skip supplemetary
 
-		if(h.qname == "E00512:127:HJNF3ALXX:3:1211:7405:50568")
-		{
-			printf("E00512:127:HJNF3ALXX:3:1211:7405:50568 nonsupple exists\n");
-		}
-
-		// int k = (h.get_qhash() % max_index + h.pos % max_index + (0 - h.isize) % max_index) % max_index;
 		int k = (h.get_qhash() % max_index + (h.flag & 0x40) + (h.flag & 0x80)) % max_index;
-		// int k = (h.get_qhash() % max_index + h.mpos % max_index) % max_index;
 
 		for(int j = 0; j < vv[k].size(); j++)
         {
@@ -305,29 +261,12 @@ int bundle::build_supplementaries()
 
             // TODO check 0x40 and 0x80 are the same for primary and supple
             if(((z.flag & 0x40) != (h.flag & 0x40)) || ((z.flag & 0x80) != (h.flag & 0x80))) continue;
-
-			if(h.qname == "E00512:127:HJNF3ALXX:3:1211:7405:50568")
-			{
-				printf("E00512:127:HJNF3ALXX:3:1211:7405:50568 supple found\n");
-			}
 			
         	h.suppl = &z;
 			h.suppl_index = u;
         	break; //Taking the first supplementary read
         }
 	}
-
-	// for(int i = 0; i < hits.size(); i++)
-	// {
-	// 	hit &h = hits[i];
-	// 	if(h.suppl != NULL && h.suppl_index != -1)
-	// 	{
-	// 		printf("hit supple assigned\n");
-	// 	}
-	// }
-
-	// printf("End of build_supplementaries\n");
-	
 	return 0;
 }
 
@@ -420,6 +359,276 @@ int bundle::build_circ_fragments()
 	return 0;
 }
 
+int bundle::bridge_circ_optimized()
+{
+	splice_graph gr;
+	graph_builder gb(*this, cfg, sp);
+	gb.build(gr);
+	gr.build_vertex_index();
+
+	graph_cluster gc(gr, *this, cfg.max_reads_partition_gap, false); //store hits true tasfia
+	vector<pereads_cluster> vc;
+	vector<pereads_cluster> vc_circ;
+
+	gc.build_pereads_clusters(vc);
+	gc.build_pereads_clusters_circ(vc_circ);
+
+	printf("size of vc:%d\n",vc.size());
+	printf("size of vc_circ:%d\n",vc_circ.size());
+
+	vc.insert(vc.end(), vc_circ.begin(), vc_circ.end());
+
+	printf("new size of vc:%d\n",vc.size());
+	bridge_solver bs(gr, vc, cfg, sp.insertsize_low, sp.insertsize_high);
+	// bridge_solver bs_circ(gr, vc_circ, cfg, sp.insertsize_low, sp.insertsize_high);
+
+	assert(vc.size() == bs.opt.size());
+
+	int cnt = 0;
+	for(int k = 0; k < vc.size(); k++)
+	{
+		if(vc[k].is_circ == true) continue;
+		// if(bs.opt[k].type <= 0) continue; //negative for empty chain
+		cnt += update_bridges(vc[k].frlist, bs.opt[k].chain, bs.opt[k].strand);
+	}
+
+	printf("gid %s: total frags %lu, bridged frags = %d\n", gid.c_str(), frgs.size(), cnt);
+
+	int non_empty_chain_vc_circ_count = 0;
+	int bridge_cnt = 0;
+
+	for(int k = 0; k < vc.size(); k++)
+	{
+		if(vc[k].is_circ == false) continue;
+		// if(bs.opt[k].type <= 0) continue; //negative for empty chain
+		non_empty_chain_vc_circ_count += 1;
+		bridge_cnt += update_bridges_circ(vc[k].frlist, bs.opt[k].chain, bs.opt[k].strand);
+	}
+
+	printf("gid %s: total circ frags %lu, bridged circ frags = %d\n", gid.c_str(), non_empty_chain_vc_circ_count, bridge_cnt);
+
+	//join circ frags
+	unordered_map<string, pair<int,int>> reg_index; 
+	// key = qname; value = list of (cluster_index, frag_index_inside_cluster)
+	
+	//build qname index for frags in reg clusters that has a suppl
+	for(int j = 0; j < vc.size(); j++)
+	{
+		if(vc[j].is_circ == true) continue;
+
+		for(int k = 0; k < vc[j].frlist.size(); k++)
+		{
+			int reg_hit1_index = frgs[vc[j].frlist[k]][0];
+			int reg_hit2_index = frgs[vc[j].frlist[k]][1];
+
+			hit &h1 = hits[reg_hit1_index];
+			hit &h2 = hits[reg_hit2_index];
+
+			if(h1.suppl != NULL)
+				reg_index[h1.qname] = {j,k};
+
+			else if(h2.suppl != NULL)
+				reg_index[h2.qname] = {j,k};
+		}
+	}
+
+	for(int i = 0; i < vc.size(); i++)
+	{
+		pereads_cluster vc_circ = vc[i]; //one frag in each cluster
+		if(vc_circ.is_circ == false) continue;
+
+		int circ_hit1_index = circ_frgs[vc_circ.frlist[0]][0];
+		int circ_hit2_index = circ_frgs[vc_circ.frlist[0]][1];
+
+		hit &circ_h1 = hits[circ_hit1_index];
+		hit &circ_h2 = hits[circ_hit2_index];
+
+		vector<int32_t> vc_circ_bridge_chain = bs.opt[i].chain; //chain index and vc index corr to same peread and its bridged chain
+
+		if((circ_h2.flag & 0x800) >= 1) //reg h1 has suppl part, as circ frag h2 has suppl not null
+		{
+			string circ_h2_suppl_qname = hits[circ_hit2_index].qname; 
+
+			auto it1 = reg_index.find(circ_h2_suppl_qname);
+			if(it1 != reg_index.end())
+			{
+				int j = it1->second.first;
+				int k = it1->second.second;
+
+				pereads_cluster vc_reg = vc[j]; //multiple frags in each cluster
+				vector<int32_t> vc_reg_bridge_chain = bs.opt[j].chain;
+
+				int reg_hit1_index = frgs[vc_reg.frlist[k]][0];
+				int reg_hit2_index = frgs[vc_reg.frlist[k]][1];
+
+				hit &h1 = hits[reg_hit1_index];
+				hit &h2 = hits[reg_hit2_index];
+
+				assert(h1.qname == h1.suppl->qname);
+				assert(h1.suppl->hid == circ_h2.hid);
+
+				printf("joined circRNA H1 has supple:\n");
+				h1.print();
+				h2.print();
+				h1.suppl->print();
+
+				vector<int32_t> x,y,z,final_intron_chain;
+				merge_intron_chains(vc_reg.chain1, vc_reg_bridge_chain, x);
+				merge_intron_chains(x, vc_reg.chain2, y);
+				merge_intron_chains(y, vc_circ_bridge_chain, z);
+				merge_intron_chains(z, vc_circ.chain2, final_intron_chain);
+
+				printf("final intron chain H1 supple, read %s:\n",h1.qname.c_str());
+				printv(final_intron_chain);
+
+				//store circRNA
+				circular_transcript circ;
+				circ.sid = sp.sample_id;
+				circ.chrm = chrm;
+				circ.start = h1.pos;
+				circ.end = h1.suppl->rpos;
+				circ.id = chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
+				circ.source = "circMeta";
+				circ.feature = "circRNA";
+				circ.score = 1;
+				circ.coverage = 1;
+				circ.strand = strand;
+				circ.gene_id = "gene_id";
+				circ.transcript_id = h1.qname;
+				circ.exon_count = final_intron_chain.size()/2 + 1;
+				circ.intron_chain = final_intron_chain;
+
+				circ.h1_suppl = true;
+				circ.intermediate_chains.push_back(vc_reg.chain1);
+				circ.intermediate_chains.push_back(vc_reg_bridge_chain);
+				circ.intermediate_chains.push_back(vc_reg.chain2);
+				circ.intermediate_chains.push_back(vc_circ_bridge_chain);
+				circ.intermediate_chains.push_back(vc_circ.chain2);
+				
+				// check partially bridged
+				int circ_frag_idx = vc_circ.frlist[0];
+				int reg_frag_idx = vc_reg.frlist[k];
+				
+				if(circ_frgs[circ_frag_idx][2] > 0 && frgs[reg_frag_idx][2] > 0)
+				{
+					printf("circRNA H1 suppl formed, both bridged\n");
+					circ.frag_bridged_type = 1;  //both bridged
+					circ_trsts.push_back(circ);
+				}
+				else if(circ_frgs[circ_frag_idx][2] > 0 && frgs[reg_frag_idx][2] <= 0)
+				{
+					printf("circRNA H1 suppl formed, circ frag bridged but reg frag unbridged\n");
+					circ.frag_bridged_type = 2; //circ frag unbridged but reg bridged
+					unbridged_candidate_trsts[h1.qname] = circ;
+					circ_frgs[circ_frag_idx][2] = 0;
+				}
+				else if(circ_frgs[circ_frag_idx][2] <= 0 && frgs[reg_frag_idx][2] > 0)
+				{
+					printf("circRNA H1 suppl formed, circ frag unbridged but reg frag bridged\n");
+					circ.frag_bridged_type = 3; //reg bridged but circ unbridged
+					unbridged_candidate_trsts[h1.qname] = circ;
+					frgs[reg_frag_idx][2] = 0;
+				}
+				else
+				{
+					printf("circRNA H1 suppl formed, both unbridged\n");
+				}
+			}
+		}
+
+		else if((circ_h1.flag & 0x800) >= 1) //reg h2 has suppl part, as circ frag h1 has suppl not null
+		{
+			string circ_h1_suppl_qname = hits[circ_hit1_index].qname; 
+
+			auto it2 = reg_index.find(circ_h1_suppl_qname);
+			if(it2 != reg_index.end())
+			{
+				int j = it2->second.first;
+				int k = it2->second.second;
+
+				pereads_cluster vc_reg = vc[j]; //multiple frags in each cluster
+				vector<int32_t> vc_reg_bridge_chain = bs.opt[j].chain;
+
+				int reg_hit1_index = frgs[vc_reg.frlist[k]][0];
+				int reg_hit2_index = frgs[vc_reg.frlist[k]][1];
+
+				hit &h1 = hits[reg_hit1_index];
+				hit &h2 = hits[reg_hit2_index];
+
+				assert(h2.qname == h2.suppl->qname);
+				assert(h2.suppl->hid == circ_h1.hid);
+
+				printf("joined circRNA H2 has supple:\n");
+				h2.suppl->print();
+				h1.print();
+				h2.print();
+
+				vector<int32_t> x,y,z,final_intron_chain;
+				merge_intron_chains(vc_circ.chain1, vc_circ_bridge_chain, x);
+				merge_intron_chains(x, vc_reg.chain1, y);
+				merge_intron_chains(y, vc_reg_bridge_chain, z);
+				merge_intron_chains(z, vc_reg.chain2, final_intron_chain);
+
+				printf("final intron chain H2 supple, read %s:\n",h2.qname.c_str());
+				printv(final_intron_chain);
+
+				//store circRNA
+				circular_transcript circ;
+				circ.sid = sp.sample_id;
+				circ.chrm = chrm;
+				circ.start = h2.suppl->pos;
+				circ.end = h2.rpos;
+				circ.id = chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
+				circ.source = "circMeta";
+				circ.feature = "circRNA";
+				circ.score = 1;
+				circ.coverage = 1;
+				circ.strand = strand;
+				circ.gene_id = "gene_id";
+				circ.transcript_id = h2.qname;
+				circ.exon_count = final_intron_chain.size()/2 + 1;
+				circ.intron_chain = final_intron_chain;
+
+				circ.h1_suppl = false;
+				circ.intermediate_chains.push_back(vc_circ.chain1);
+				circ.intermediate_chains.push_back(vc_circ_bridge_chain);
+				circ.intermediate_chains.push_back(vc_reg.chain1);
+				circ.intermediate_chains.push_back(vc_reg_bridge_chain);
+				circ.intermediate_chains.push_back(vc_reg.chain2);
+				
+				// check partially bridged
+				int circ_frag_idx = vc_circ.frlist[0];
+				int reg_frag_idx = vc_reg.frlist[k];
+
+				if(circ_frgs[circ_frag_idx][2] > 0 && frgs[reg_frag_idx][2] > 0)
+				{
+					printf("circRNA H2 suppl formed, both bridged\n");
+					circ.frag_bridged_type = 1;  //both bridged
+					circ_trsts.push_back(circ);
+				}
+				else if(circ_frgs[circ_frag_idx][2] > 0 && frgs[reg_frag_idx][2] <= 0)
+				{
+					printf("circRNA H2 suppl formed, circ frag bridged but reg frag unbridged\n");
+					circ.frag_bridged_type = 2; //circ frag unbridged but reg bridged
+					unbridged_candidate_trsts[h1.qname] = circ;
+					circ_frgs[circ_frag_idx][2] = 0;
+				}
+				else if(circ_frgs[circ_frag_idx][2] <= 0 && frgs[reg_frag_idx][2] > 0)
+				{
+					printf("circRNA H2 suppl formed, circ frag unbridged but reg frag bridged\n");
+					circ.frag_bridged_type = 3; //reg bridged but circ frga unbridged
+					unbridged_candidate_trsts[h1.qname] = circ;
+					frgs[reg_frag_idx][2] = 0;
+				}
+				else
+				{
+					printf("circRNA H2 suppl formed, both unbridged\n");
+				}
+			}
+		}
+	}
+	return 0;
+}
 int bundle::bridge_circ()
 {
 	splice_graph gr;
