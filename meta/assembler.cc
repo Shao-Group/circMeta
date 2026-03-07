@@ -30,6 +30,13 @@ assembler::assembler(const parameters &c, transcript_set &tm, mutex &m, int r, i
 	assert(tmerge.rid == rid);
 	circ_trsts.clear();
 	all_unbridged_candidate_trsts.clear();
+
+	//for circRNA
+	fai = NULL;
+	if(cfg.fasta_file != "")
+	{
+		fai = fai_load(cfg.fasta_file.c_str());
+	}
 }
 
 int assembler::resolve_circ(vector<bundle*> gv)
@@ -43,6 +50,7 @@ int assembler::resolve_circ(vector<bundle*> gv)
 		gv[k]->build_supplementaries();
 		gv[k]->set_chimeric_cigar_positions();
 		gv[k]->print(k);
+		gv[k]->fix_alignment_boundaries();
 		gv[k]->build_circ_fragments();
 		gv[k]->bridge_circ_optimized();
 		mylock.lock();
@@ -1045,7 +1053,7 @@ int assembler::bridge_circ_optimized(vector<bundle*> gv)
 		for(int j = 0; j < vc.size(); j++)
 		{
 			if(vc[j].is_circ == true) continue;
-			// if(bs.opt[j].type <= 0) continue;
+			if(bs.opt[j].type <= 0) continue;
 			cnt1 += 1;
 			// printf("calling update bridge from assembler\n");
 			cnt2 += bd.update_bridges(vc[j].frlist, bs.opt[j].chain, bs.opt[j].strand);
@@ -1062,7 +1070,7 @@ int assembler::bridge_circ_optimized(vector<bundle*> gv)
 		for(int j = 0; j < vc.size(); j++)
 		{
 			if(vc[j].is_circ == false) continue;
-			// if(bs.opt[j].type <= 0) continue;
+			if(bs.opt[j].type <= 0) continue;
 			non_empty_chain_vc_circ_count += 1;
 			bridge_cnt += bd.update_bridges_circ(vc[j].frlist, bs.opt[j].chain, bs.opt[j].strand);
 			//vc[j].print(j);
@@ -1106,6 +1114,11 @@ int assembler::bridge_circ_optimized(vector<bundle*> gv)
 
 			hit &circ_h1 = bd.hits[circ_hit1_index];
 			hit &circ_h2 = bd.hits[circ_hit2_index];
+
+			if(circ_h1.qname == "E00512:127:HJNF3ALXX:1:2109:16325:60712")
+			{
+				printf("meta circRNA candidate read exists in vc circ:%s\n",circ_h1.qname.c_str());
+			}
 
 			vector<int32_t> vc_circ_bridge_chain = bs.opt[i].chain; //chain index and vc index corr to same peread and its bridged chain
 
@@ -1318,19 +1331,19 @@ int assembler::bridge_circ_optimized(vector<bundle*> gv)
 					}
 					else if(bd.circ_frgs[circ_frag_idx][2] > 0 && bd.frgs[reg_frag_idx][2] <= 0)
 					{
-						printf("meta circRNA H2 suppl formed, circ frag bridged but reg frag unbridged, read:%s\n",circ.transcript_id.c_str());
+						printf("meta circRNA H2 suppl formed, circ frag bridged but reg frag unbridged, chrm:%s, read:%s\n",bd.chrm.c_str(),circ.transcript_id.c_str());
 						// circ.frag_bridged_type = 2;
 						// unbridged_candidate_trsts[h1.qname] = circ;
 					}
 					else if(bd.circ_frgs[circ_frag_idx][2] <= 0 && bd.frgs[reg_frag_idx][2] > 0)
 					{
-						printf("meta circRNA H2 suppl formed, circ frag unbridged but reg frag bridged, read:%s\n",circ.transcript_id.c_str());
+						printf("meta circRNA H2 suppl formed, circ frag unbridged but reg frag bridged, chrm:%s, read:%s\n",bd.chrm.c_str(),circ.transcript_id.c_str());
 						// circ.frag_bridged_type = 3;
 						// unbridged_candidate_trsts[h1.qname] = circ;
 					}
 					else
 					{
-						printf("meta circRNA H2 suppl formed, both unbridged, read:%s\n",circ.transcript_id.c_str());
+						printf("meta circRNA H2 suppl formed, both unbridged, chrm:%s, read:%s\n",bd.chrm.c_str(),circ.transcript_id.c_str());
 					}
 				}
 			}

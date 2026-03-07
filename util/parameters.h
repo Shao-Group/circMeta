@@ -110,6 +110,7 @@ public:
 	//for circRNA
 	int read_length;
 	int alignment_boundary_error;
+	string fasta_file;
 
 public:
 	int print_command_line(int argc, const char ** argv);

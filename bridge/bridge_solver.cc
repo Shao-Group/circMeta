@@ -322,6 +322,7 @@ int bridge_solver::vote(int r, bridge_path &bbp)
 	bbp.type = -1;
 	int ss = vpairs[r].first;
 	int tt = vpairs[r].second;
+
 	if(ss < 0 || tt < 0) return 0;
 
 	const pereads_cluster &pc = vc[r];
@@ -340,17 +341,17 @@ int bridge_solver::vote(int r, bridge_path &bbp)
 		vector<int32_t> c;
 		vector<int32_t> w;
 		bool b = merge_intron_chains(pc.chain1, pc.chain2, w);
+
 		if(b == false) return 0;
+
 		b = check_increasing_sequence(w);
-		if(b == false) return 0;
+		assert(b == true);
+		// if(b == false) return 0;
+		
 		int s = check_strand_from_intron_coordinates(gr, w);
 		if(s < 0) return 0;
 
 		type = 1;
-		// if(pc.is_circ == true)
-		// {
-		// 	printf("bridge solver circ path type marked 1, read:%s\n",pc.hits1[0].qname.c_str());
-		// }
 
 		chains.push_back(c);
 		wholes.push_back(w);
@@ -360,10 +361,12 @@ int bridge_solver::vote(int r, bridge_path &bbp)
 	else if(pindex.find(PI(ss, tt)) != pindex.end())
 	{
 		type = 2;
-		// if(pc.is_circ == true)
+
+		// if(pc.is_circ == true && pc.hits1[0].qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
 		// {
-		// 	printf("bridge solver circ path type marked 2, read:%s\n",pc.hits1[0].qname.c_str());
+		// 	printf("marked 2 circ voting loop, read:%s\n",pc.hits1[0].qname.c_str());
 		// }
+
 		int k = pindex[PI(ss, tt)];
 		vector<bridge_path> &pb = piers[k].bridges;
 		for(int e = 0; e < pb.size(); e++)
@@ -402,10 +405,27 @@ int bridge_solver::vote(int r, bridge_path &bbp)
 		int32_t length = pc.bounds[3] - pc.bounds[0] - intron;
 
 		//printf(" candidate %d, list = ", e); printv(wholes[e]); printf(", length = %d, low = %d, high = %d, strand = %d\n", length, length_low, length_high, strands[e]);
+		
+		// if(pc.is_circ == true && pc.hits1[0].qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
+		// {
+		// 	printf("entered chains selection, read:%s, length:%d\n",pc.hits1[0].qname.c_str(), length);
+		// 	printf("printing chain:\n");
+		// 	printv(chains[e]);
+		// }
 
-		if(length < length_low) continue; //insert size condition diff for reg and circ!
-		if(length > length_high) continue;
+		if(pc.is_circ == false)
+		{
+			if(length < length_low) continue; //insert size condition diff for reg and circ!
+			if(length > length_high) continue;
+		}
+
 		if(strands[e] < 0) continue;
+
+		// if(pc.is_circ == true && pc.hits1[0].qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
+		// {
+		// 	printf("passed insert size and strands condition, read:%s\n",pc.hits1[0].qname.c_str());
+		// 	printv(chains[e]);
+		// }
 
 		// TODO
 		//if(scores[e] < cfg.min_bridging_score) continue;
@@ -416,10 +436,10 @@ int bridge_solver::vote(int r, bridge_path &bbp)
 
 	if(be < 0) return 0;
 
-	if(pc.is_circ == true && pc.hits1[0].qname == "E00512:127:HJNF3ALXX:1:2120:28118:4034")
-	{
-		printf("E00512:127:HJNF3ALXX:1:2120:28118:4034 type set to %d\n",type);
-	}
+	// if(pc.is_circ == true && pc.hits1[0].qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
+	// {
+	// 	printf("passed be < 0 check, read:%s\n",pc.hits1[0].qname.c_str());
+	// }
 
 	bbp.type = type;
 	bbp.score = scores[be];

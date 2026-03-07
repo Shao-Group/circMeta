@@ -18,6 +18,7 @@ See LICENSE for licensing.
 #include <boost/pending/disjoint_sets.hpp>
 
 #include "circular_transcript.h"
+#include "htslib/faidx.h"
 
 typedef boost::asio::thread_pool thread_pool;
 
@@ -35,6 +36,9 @@ public:
 	int instance;
 	vector<circular_transcript> circ_trsts;
 	map<string, circular_transcript> all_unbridged_candidate_trsts;
+
+	//for circRNA
+	faidx_t *fai;
 
 public:
 	int resolve(vector<bundle*> gv);

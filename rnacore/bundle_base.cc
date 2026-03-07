@@ -72,15 +72,15 @@ int bundle_base::add_borrowed_path(const vector<int32_t> &p, double w)
 
 int bundle_base::add_hit(const hit &ht)
 {
-	if(hits.size() >= 1)
-	{
-		hit &p = hits.back();
-		if(p.pos == ht.pos && p.rpos == ht.rpos && p.mpos == ht.mpos)
-		// if(p.pos == ht.pos && p.rpos == ht.rpos)
-		{
-			return -1;
-		}
-	}
+	// if(hits.size() >= 1)
+	// {
+	// 	hit &p = hits.back();
+	// 	if(p.pos == ht.pos && p.rpos == ht.rpos && p.mpos == ht.mpos)
+	// 	// if(p.pos == ht.pos && p.rpos == ht.rpos)
+	// 	{
+	// 		return -1;
+	// 	}
+	// }
 
 	// store new hit
 	hits.push_back(ht);
@@ -449,9 +449,9 @@ int bundle_base::update_bridges_circ(const vector<int> &frlist, const vector<int
 		hit &h1 = hits[circ_frgs[k][0]];
 		hit &h2 = hits[circ_frgs[k][1]];
 
-		if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+		if(h1.qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
 		{
-			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 enter in update bridges circ\n");
+			printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 enter in update bridges circ\n");
 		}
 		
 		assert(h1.hid >= 0);
@@ -463,19 +463,19 @@ int bundle_base::update_bridges_circ(const vector<int> &frlist, const vector<int
 		v1.insert(v1.end(), chain.begin(), chain.end());
 		v1.push_back(h2.pos);
 
-		if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+		if(h1.qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
 		{
-			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 printing chain in update bridges\n");
+			printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 printing chain in update bridges circ\n");
 			printv(chain);
-			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 printing v1 in update bridges\n");
+			printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 printing v1 in update bridges circ\n");
 			printv(v1);
 		}
 
-		if(h1.rpos < h2.pos && check_increasing_sequence(v1) == false) continue; //check tasfia
+		// if(h1.rpos < h2.pos && check_increasing_sequence(v1) == false) continue; //check tasfia
 
-		if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+		if(h1.qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
 		{
-			printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 passed check increasing seq\n");
+			printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 passed check increasing seq circ\n");
 		}
 
 
@@ -484,9 +484,9 @@ int bundle_base::update_bridges_circ(const vector<int> &frlist, const vector<int
 		if(chain.size() <= 0)
 		{
 			circ_frgs[k][2] = 1;
-			if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+			if(h1.qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
 			{
-				printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 circ frg type marked 1\n");
+				printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 circ frg type marked 1\n");
 			}
 		}
 		else
@@ -508,9 +508,9 @@ int bundle_base::update_bridges_circ(const vector<int> &frlist, const vector<int
 
 			circ_frgs[k][2] = 2;
 
-			if(h1.qname == "E00512:127:HJNF3ALXX:2:1102:25895:71735")
+			if(h1.qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
 			{
-				printf("E00512:127:HJNF3ALXX:2:1102:25895:71735 circ frg type marked 2\n");
+				printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 circ frg type marked 2\n");
 			}
 
 			// if(s == ss)
@@ -581,8 +581,31 @@ int bundle_base::update_bridges(const vector<int> &frlist, const vector<int32_t>
 		v1.insert(v1.end(), chain.begin(), chain.end());
 		v1.push_back(h2.pos);
 
-		if(h1.rpos < h2.pos && check_increasing_sequence(v1) == false) continue; //check tasfia
+		// if(h1.qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
+		// {
+		// 	printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 printing chain in update bridges\n");
+		// 	printv(chain);
+		// 	printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 printing v1 in update bridges\n");
+		// 	printv(v1);
+		// }
 
+		// if(h1.qname == "E00512:127:HJNF3ALXX:3:2112:2483:53328")
+		// {
+		// 	printf("E00512:127:HJNF3ALXX:3:2112:2483:53328 printing chain in update bridges\n");
+		// 	printv(chain);
+		// 	printf("E00512:127:HJNF3ALXX:3:2112:2483:53328 printing v1 in update bridges\n");
+		// 	printv(v1);
+		// }
+		// if(h1.rpos < h2.pos && check_increasing_sequence(v1) == false) continue; //check tasfia
+
+		// if(h1.qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
+		// {
+		// 	printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 passed check increasing seq\n");
+		// }
+		// if(h1.qname == "E00512:127:HJNF3ALXX:3:2112:2483:53328")
+		// {
+		// 	printf("E00512:127:HJNF3ALXX:3:2112:2483:53328 passed check increasing seq\n");
+		// }
 		cnt++;
 
 		if(chain.size() <= 0)

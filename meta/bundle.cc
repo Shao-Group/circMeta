@@ -322,6 +322,11 @@ int bundle::build_circ_fragments()
 		{
 			hit *h2_supple = h2.suppl;
 
+			if(h2.qname == "E00512:127:HJNF3ALXX:3:1105:24211:69309")
+			{
+				printf("meta circRNA candidate read entered build circ frags:%s\n",h2.qname.c_str());
+			}
+
 			//use |prim.S/H + suppl.S/H - read-length| <= a threshold as a criteria for discarding cases
 			int32_t len_HS = 0;
 
@@ -348,14 +353,123 @@ int bundle::build_circ_fragments()
 				continue;
 			}
 
+			if(h2.qname == "E00512:127:HJNF3ALXX:3:1105:24211:69309")
+			{
+				printf("h2.second pos:%d, h1.rpos:%d\n", h2.second_pos, h1.rpos);
+			}
+
 			// if(h2.suppl->pos < h1.pos && h1.pos < h2.pos)
 			if(h2_supple->second_pos <= h1.pos && h2_supple->second_pos <= h2.pos && h2.second_pos >= h2_supple->rpos && h2.second_pos >= h1.rpos)
 			{
+				if(h2.qname == "E00512:127:HJNF3ALXX:3:1105:24211:69309")
+				{
+					printf("meta circRNA candidate read pushed in circ frags:%s\n",h2.qname.c_str());
+				}
 				circ_frgs.push_back(AI3({h2.suppl_index, idx1, 0}));
 			}
 		}
 	}
 
+	return 0;
+}
+
+int bundle::fix_alignment_boundaries()
+{
+	for(int k = 0; k < frgs.size(); k++)
+	{
+		int idx1 = frgs[k][0];
+		int idx2 = frgs[k][1];
+		hit &h1 = hits[idx1];
+		hit &h2 = hits[idx2];
+
+		if(h1.suppl != NULL)
+		{
+			hit *h1_supple = h1.suppl;
+
+			//fixing boundaries for h1 and its suppl
+			if(h1.pos > h2.pos && h1.pos <= h1_supple->pos && h1_supple->rpos >= h1.rpos && h1_supple->rpos >= h2.rpos && h1.pos - h2.pos <= cfg.alignment_boundary_error)
+			{
+				int32_t diff = h1.pos - h2.pos;
+
+				int first_M_len = 0;
+				for(int i=0;i<h2.cigar_vector.size();i++)
+				{
+					if(h2.cigar_vector[i].first == 'M')
+					{
+						first_M_len = h2.cigar_vector[i].second;
+						break;
+					}
+				}
+
+				if(first_M_len > cfg.alignment_boundary_error)
+				{
+					h2.pos = h2.pos + diff;
+				}
+			}
+			else if(h1.pos <= h2.pos && h1.pos <= h1_supple->pos && h1_supple->rpos >= h1.rpos && h1_supple->rpos < h2.rpos && h2.rpos - h1_supple->rpos <= cfg.alignment_boundary_error)
+			{
+				int32_t diff = h2.rpos - h1_supple->rpos;
+
+				int last_M_len = 0;
+				for(int i=0;i<h2.cigar_vector.size();i++)
+				{
+					if(h2.cigar_vector[i].first == 'M')
+					{
+						last_M_len = h2.cigar_vector[i].second;
+					}
+				}
+
+				if(last_M_len > cfg.alignment_boundary_error)
+				{
+					h2.rpos = h2.rpos - diff;
+				}
+			}
+		}
+
+		if(h2.suppl != NULL)
+		{
+			hit *h2_supple = h2.suppl;
+
+			//fixing boundaries for h2 and its suppl
+			if(h2_supple->pos <= h1.pos && h2_supple->pos <= h2.pos && h2.rpos >= h2_supple->rpos && h2.rpos < h1.rpos && h1.rpos - h2.rpos <= cfg.alignment_boundary_error)
+			{
+				int32_t diff = h1.rpos - h2.rpos;
+
+				int last_M_len = 0;
+				for(int i=0;i<h1.cigar_vector.size();i++)
+				{
+					if(h1.cigar_vector[i].first == 'M')
+					{
+						last_M_len = h1.cigar_vector[i].second;
+					}
+				}
+
+				if(last_M_len > cfg.alignment_boundary_error)
+				{
+					h1.rpos = h1.rpos - diff;
+				}
+			}
+			else if(h2_supple->pos > h1.pos && h2_supple->pos <= h2.pos && h2.rpos >= h2_supple->rpos && h2.rpos >= h1.rpos && h2_supple->pos - h1.pos <= cfg.alignment_boundary_error)
+			{
+				int32_t diff = h2_supple->pos - h1.pos;
+
+				int first_M_len = 0;
+				for(int i=0;i<h1.cigar_vector.size();i++)
+				{
+					if(h1.cigar_vector[i].first == 'M')
+					{
+						first_M_len = h1.cigar_vector[i].second;
+						break;
+					}
+				}
+
+				if(first_M_len > cfg.alignment_boundary_error)
+				{
+					h1.pos = h1.pos + diff;
+				}
+			}
+		}
+	} 
 	return 0;
 }
 
@@ -388,7 +502,7 @@ int bundle::bridge_circ_optimized()
 	for(int k = 0; k < vc.size(); k++)
 	{
 		if(vc[k].is_circ == true) continue;
-		// if(bs.opt[k].type <= 0) continue; //negative for empty chain
+		if(bs.opt[k].type <= 0) continue; 
 		cnt += update_bridges(vc[k].frlist, bs.opt[k].chain, bs.opt[k].strand);
 	}
 
@@ -400,7 +514,11 @@ int bundle::bridge_circ_optimized()
 	for(int k = 0; k < vc.size(); k++)
 	{
 		if(vc[k].is_circ == false) continue;
-		// if(bs.opt[k].type <= 0) continue; //negative for empty chain
+		if(hits[circ_frgs[vc[k].frlist[0]][0]].qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630" && bs.opt[k].type <= 0)
+		{
+			printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 path type negative\n");
+		}
+		if(bs.opt[k].type <= 0) continue;
 		non_empty_chain_vc_circ_count += 1;
 		bridge_cnt += update_bridges_circ(vc[k].frlist, bs.opt[k].chain, bs.opt[k].strand);
 	}
@@ -571,6 +689,14 @@ int bundle::bridge_circ_optimized()
 
 				printf("final intron chain H2 supple, read %s:\n",h2.qname.c_str());
 				printv(final_intron_chain);
+
+				if(h2.suppl->qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630")
+				{
+					printf("printing circ bridge chain:");
+					printv(vc_circ_bridge_chain);
+					printf("printing reg bridge chain:");
+					printv(vc_reg_bridge_chain);
+				}
 
 				//store circRNA
 				circular_transcript circ;

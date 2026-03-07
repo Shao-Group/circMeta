@@ -112,7 +112,7 @@ parameters::parameters()
 
 	//for circRNA
 	read_length = 100;
-	int alignment_boundary_error = 5;
+	alignment_boundary_error = 5;
 }
 
 int parameters::parse_arguments(int argc, const char ** argv, int data_type)
@@ -127,6 +127,11 @@ int parameters::parse_arguments(int argc, const char ** argv, int data_type)
 		if(string(argv[i]) == "-o")
 		{
 			output_gtf_file = string(argv[i + 1]);
+			i++;
+		}
+		else if(string(argv[i]) == "-f")
+		{
+			fasta_file = string(argv[i + 1]);
 			i++;
 		}
 		if(string(argv[i]) == "-l")
