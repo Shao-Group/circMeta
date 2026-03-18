@@ -113,6 +113,9 @@ parameters::parameters()
 	//for circRNA
 	read_length = 100;
 	alignment_boundary_error = 5;
+	fasta_file = "";
+	min_soft_clip_len = 15;
+	max_softclip_to_junction_gap = 100000;
 }
 
 int parameters::parse_arguments(int argc, const char ** argv, int data_type)

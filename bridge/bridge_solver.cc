@@ -376,7 +376,8 @@ int bridge_solver::vote(int r, bridge_path &bbp)
 			w.insert(w.end(), pc.chain2.begin(), pc.chain2.end());
 
 			bool b = check_increasing_sequence(w);
-			if(b == false) continue;
+			assert(b == true);
+			// if(b == false) continue;
 			int s = check_strand_from_intron_coordinates(gr, w);
 			if(s < 0) continue;
 

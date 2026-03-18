@@ -35,6 +35,7 @@ public:
 	int count;						// number of such reads in this cluster
 
 	bool is_circ;					// is circ peread_cluster
+	bool is_fake_circ;				// is fake circ peread_cluster, i.e., oen hit is fake
 
 public:
 	int clear();

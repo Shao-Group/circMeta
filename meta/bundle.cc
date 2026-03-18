@@ -7,7 +7,6 @@ See LICENSE for licensing.
 #include "bundle.h"
 #include "config.h"
 #include "essential.h"
-#include "graph_builder.h"
 #include "graph_cluster.h"
 #include "bridge_solver.h"
 
@@ -51,6 +50,361 @@ int bundle::copy_meta_information(const bundle &bb)
 	tid = bb.tid;
 	lpos = bb.lpos;
 	rpos = bb.rpos;
+	return 0;
+}
+
+int bundle::get_more_chimeric_reads(faidx_t *fai)
+{
+	splice_graph gr;
+	graph_builder gb(*this, cfg, sp);
+	gb.build(gr);
+
+	for(int k = 0; k < frgs.size(); k++)
+	{
+		int idx1 = frgs[k][0];
+		int idx2 = frgs[k][1];
+		hit &h1 = hits[idx1];
+		hit &h2 = hits[idx2];
+
+		//has a supple
+		if(h1.has_chimeric_suppl == true || h2.has_chimeric_suppl == true) continue;
+
+		//is a supple
+		if((h1.flag & 0x800) >= 1 || (h2.flag & 0x800) >= 1) continue;
+
+		//if h2 pos is to the left of h1 pos
+		if(h1.pos > h2.pos) continue;
+
+		//if none of the sides have soft clip, continue
+		if(h1.cigar_vector[0].first != 'S' && h2.cigar_vector[h2.cigar_vector.size()-1].first != 'S') continue;
+		
+		int soft_clip_side = 0; //if left soft kept, this will be 1, if right soft kept, this will be 2
+
+		//check which side has soft clip and set flag accordingly, if both sides have soft clip, keep larger
+		if(h1.cigar_vector[0].first == 'S' && h2.cigar_vector[h2.cigar_vector.size()-1].first != 'S')
+		{
+			soft_clip_side = 1;
+			printf("H1 has soft clip only, chr:%s, read:%s, pos:%d\n",chrm.c_str(),h1.qname.c_str(),h1.pos);
+				
+		}
+		else if(h1.cigar_vector[0].first != 'S' && h2.cigar_vector[h2.cigar_vector.size()-1].first == 'S')
+		{
+			soft_clip_side = 2;
+			printf("H2 has soft clip only, chr:%s, read:%s, pos:%d\n",chrm.c_str(),h2.qname.c_str(),h2.pos);
+				
+		}
+		else if(h1.cigar_vector[0].first == 'S' && h2.cigar_vector[h2.cigar_vector.size()-1].first == 'S')
+		{
+			int32_t left_len = h1.cigar_vector[0].second;
+			int32_t right_len = h2.cigar_vector[h2.cigar_vector.size()-1].second;
+
+			printf("both H1 and H2 has soft clip, chr:%s, read:%s, pos:%d\n",chrm.c_str(),h2.qname.c_str(),h2.pos);
+			if(left_len > right_len) soft_clip_side = 1;
+			else if(left_len < right_len) soft_clip_side = 2;
+			else //if both side len same, skip for now
+			{
+				printf("both sides have same soft clip len, skip for now, chr:%s, read:%s, pos:%d\n",chrm.c_str(),h1.qname.c_str(),h1.pos);
+				continue;
+			}
+		}
+
+		//discard if soft len < min_soft_clip_len
+		if(soft_clip_side == 1 && h1.cigar_vector[0].second < cfg.min_soft_clip_len) continue;
+		if(soft_clip_side == 2 && h2.cigar_vector[h2.cigar_vector.size()-1].second < cfg.min_soft_clip_len) continue;
+
+		map<string, pair<int32_t, int32_t>> left_soft; //key:pos and seq, val junc pos pair
+		map<string, pair<int32_t, int32_t>> right_soft;
+
+		bool exists = false;
+
+		//check if already exists in left_soft
+		if(soft_clip_side == 1)
+		{
+			int32_t soft_len = h1.cigar_vector[0].second;
+			assert(h1.soft_left_clip_seqs.size() == 2);
+
+			string hash = to_string(h1.pos) + "|" + h1.soft_left_clip_seqs[0];
+			if(left_soft.find(hash) != left_soft.end())
+			{
+				if(left_soft[hash].first != -1 && left_soft[hash].second != -1)
+				{
+					//present in map and junc exitsts, create supple
+					//printf("soft left clip:exists, fake created\n");
+					create_fake_supple(k,soft_len,left_soft[hash].first,left_soft[hash].second,soft_clip_side);
+				}
+				exists = true;
+			}
+			else
+			{
+				double best_similarity = -1.0;
+				int32_t best_pos1 = -1;
+				int32_t best_pos2 = -1;
+				int32_t best_effective_len = -1;
+
+				//not present in map, check mapping to junctions
+				for(int j=0;j<gb.regions.size();j++)
+				{
+					region &rc = gb.regions[j];
+					if(rc.rpos <= h2.rpos || rc.rpos <= h1.rpos) continue;
+					if(abs(rc.rpos-h2.rpos) > cfg.max_softclip_to_junction_gap) continue;
+					if(rc.rtype != LEFT_SPLICE) continue;
+
+					int32_t effective_len = min(soft_len,rc.rpos-rc.lpos+1);
+					if(effective_len < cfg.min_soft_clip_len) continue;
+
+					string s = h1.soft_left_clip_seqs[0];
+					string new_s = s.substr(s.size()-effective_len,effective_len);
+
+					int32_t pos1 = rc.rpos-effective_len+1;
+					int32_t pos2 = rc.rpos;
+
+					string region_seq = get_fasta_seq(fai, pos1, pos2);
+					assert(region_seq.size() == new_s.size());
+
+					double similarity = get_Jaccard(new_s,region_seq);
+
+					if(similarity >= cfg.min_jaccard && similarity > best_similarity)
+					{
+						best_similarity = similarity;
+						best_pos1 = pos1;
+						best_pos2 = pos2;
+						best_effective_len = effective_len;
+					}
+				}
+
+				// apply best match
+				if(best_similarity >= cfg.min_jaccard)
+				{
+					create_fake_supple(k, best_effective_len, best_pos1, best_pos2, soft_clip_side);
+					left_soft[hash] = pair<int32_t,int32_t>(best_pos1, best_pos2);
+				}
+			}
+		}
+
+		//check if already exists in right_soft
+		else if(soft_clip_side == 2)
+		{
+			int32_t soft_len = h2.cigar_vector[h2.cigar_vector.size()-1].second;
+			assert(h2.soft_right_clip_seqs.size() == 2);
+
+			string hash = to_string(h2.rpos) + "|" + h2.soft_right_clip_seqs[0];
+			if(right_soft.find(hash) != right_soft.end())
+			{
+				if(right_soft[hash].first != -1 && right_soft[hash].second != -1)
+				{
+					//present in map and junc exitsts, create supple
+					//printf("soft right clip:exists, fake created\n");
+					create_fake_supple(k,soft_len,right_soft[hash].first,right_soft[hash].second,soft_clip_side);
+				}
+				exists = true;
+			}
+			else
+			{
+				double best_similarity = -1.0;
+				int32_t best_pos1 = -1;
+				int32_t best_pos2 = -1;
+				int32_t best_effective_len = -1;
+
+				//not present in map, check mapping to junctions
+				for(int j=0;j<gb.regions.size();j++)
+				{
+					region &rc = gb.regions[j];
+					if(rc.lpos >= h2.pos || rc.lpos >= h1.pos) continue;
+					if(abs(rc.lpos-h1.pos) > cfg.max_softclip_to_junction_gap) continue;
+					if(rc.ltype != RIGHT_SPLICE) continue;
+
+					int32_t effective_len = min(soft_len,rc.rpos-rc.lpos+1);
+					if(effective_len < cfg.min_soft_clip_len) continue;
+
+					string s = h2.soft_right_clip_seqs[0];
+					string new_s = s.substr(0,effective_len);
+
+					int32_t pos1 = rc.lpos;
+					int32_t pos2 = rc.lpos+effective_len-1;
+
+					string region_seq = get_fasta_seq(fai, pos1, pos2);
+					assert(region_seq.size() == new_s.size());
+
+					double similarity = get_Jaccard(new_s,region_seq);
+
+					if(similarity >= cfg.min_jaccard && similarity > best_similarity)
+					{
+						best_similarity = similarity;
+						best_pos1 = pos1;
+						best_pos2 = pos2;
+						best_effective_len = effective_len;
+					}
+				}
+
+				// apply best match
+				if(best_similarity >= cfg.min_jaccard)
+				{
+					create_fake_supple(k, best_effective_len, best_pos1, best_pos2, soft_clip_side);
+					right_soft[hash] = pair<int32_t,int32_t>(best_pos1, best_pos2);
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+double bundle::get_Jaccard(string s, string t)
+{
+	int kmer_length = 10;
+	map<string,int> kmer_map;
+	kmer_map.clear();
+
+	for(int i=0;i<=s.size()-kmer_length;i++)
+	{
+		string kmer = s.substr(i,kmer_length);
+
+		if(kmer_map.find(kmer) == kmer_map.end())
+		{
+			kmer_map.insert(pair<string,int>(kmer,1));
+		}
+	}
+
+	int match_count = 0;
+	for(int i=0;i<=t.size()-kmer_length;i++)
+	{
+		string kmer = t.substr(i,kmer_length);
+		if(kmer_map.find(kmer) != kmer_map.end())
+		{
+			match_count++;
+		}
+	}
+
+	int kmer_number = t.size()-kmer_length+1;
+	double jaccard = 0;
+	jaccard = (double) match_count/ (double) (kmer_number + kmer_number - match_count);
+	//printf("match count = %d, kmer_number = %d, jaccard %lf\n",match_count,kmer_number,jaccard);
+	return jaccard;
+}
+
+double bundle::get_Jaccard_correct(string s, string t)
+{
+    int kmer_length = 10;
+
+    set<string> A;
+    set<string> B;
+
+    for(int i=0;i<=s.size()-kmer_length;i++)
+        A.insert(s.substr(i,kmer_length));
+
+    for(int i=0;i<=t.size()-kmer_length;i++)
+        B.insert(t.substr(i,kmer_length));
+
+    int intersection = 0;
+
+    for(const auto &k : A)
+    {
+        if(B.find(k) != B.end())
+            intersection++;
+    }
+
+    int union_size = A.size() + B.size() - intersection;
+
+    if(union_size == 0) return 0;
+
+    return (double)intersection / (double)union_size;
+}
+
+string bundle::get_fasta_seq(faidx_t *fai, int32_t pos1, int32_t pos2)
+{
+	string out = "";
+	if(fai != NULL)
+	{
+		//printf("extracting fasta seq from region:\n");
+		int32_t seqlen;
+		char* seq = faidx_fetch_seq(fai, chrm.c_str(), pos1, pos2, &seqlen);
+		if(seq != NULL && seqlen > 0)
+		{
+			//printf("seqlen = %d, seq = %s\n",seqlen,seq);
+			for(int i=0;i<seqlen;i++)
+			{
+				out = out + seq[i];
+			}
+		}
+	}
+	return out;
+}
+
+int bundle::create_fake_supple(int fr_index, int32_t soft_len, int32_t pos1, int32_t pos2, int soft_clip_side)
+{
+	int idx1 = frgs[fr_index][0];
+	int idx2 = frgs[fr_index][1];
+
+	if(idx1 >= hits.size() || idx2 >= hits.size())
+	{
+		printf("Index error: idx1=%d idx2=%d hits=%lu\n",
+			idx1, idx2, hits.size());
+		abort();
+	}
+
+	// Store values needed before push_back
+	string qname = hits[idx1].qname;
+
+	int32_t mpos;
+	int32_t strand;
+
+	if(soft_clip_side == 1)
+	{
+		mpos = hits[idx1].mpos;
+		strand = hits[idx1].strand;
+	}
+	else
+	{
+		mpos = hits[idx2].mpos;
+		strand = hits[idx2].strand;
+	}
+
+	// Create new hit
+	hit new_hit;
+
+	new_hit.hid = hits.back().hid + 1;
+	new_hit.is_fake = true;
+	new_hit.soft_clip_side = soft_clip_side;
+	new_hit.qname = qname;
+
+	new_hit.pos = pos1;
+	new_hit.rpos = pos2;
+	new_hit.n_cigar = 1;
+
+	new_hit.cigar_vector.push_back(pair<char,int32_t>('M', soft_len));
+	new_hit.fake_hit_index = fr_index;
+
+	new_hit.mpos = mpos;
+	new_hit.isize = 0;
+	new_hit.strand = strand;
+
+	// Push to hits
+	hits.push_back(new_hit);
+
+	if(soft_clip_side == 1)
+	{
+		hits[idx1].soft_clip_side = soft_clip_side;
+		hits[idx1].has_fake_suppl = true;
+	}
+	else
+	{
+		hits[idx2].soft_clip_side = soft_clip_side;
+		hits[idx2].has_fake_suppl = true;
+	}
+
+	// // Update supplementary links safely
+	// if(soft_clip_side == 1)
+	// {
+	// 	hits[idx1].suppl = &hits[new_idx];
+	// 	hits[idx1].suppl_index = new_idx;
+	// 	circ_frgs.push_back(AI3({idx2, new_idx, 0}));
+	// }
+	// else
+	// {
+	// 	hits[idx2].suppl = &hits[new_idx];
+	// 	hits[idx2].suppl_index = new_idx;
+	// 	circ_frgs.push_back(AI3({new_idx, idx1, 0}));
+	// }
+
 	return 0;
 }
 
@@ -220,15 +574,13 @@ int bundle::set_chimeric_cigar_positions()
 	return 0;
 }
 
-int bundle::build_supplementaries()
+int bundle::set_supplementaries()
 {
 	int max_index = hits.size() + 1;
 	if(max_index > 1000000) max_index = 1000000;
 
 	vector< vector<int> > vv;
 	vv.resize(max_index);
-
-	printf("hits size:%d\n",hits.size());
 
 	// first build index
 	for(int i = 0; i < hits.size(); i++)
@@ -262,10 +614,153 @@ int bundle::build_supplementaries()
             // TODO check 0x40 and 0x80 are the same for primary and supple
             if(((z.flag & 0x40) != (h.flag & 0x40)) || ((z.flag & 0x80) != (h.flag & 0x80))) continue;
 			
+        	h.has_chimeric_suppl = true; //set this so chimeric reads can be excluded in get more chimeric
+        	break; //Taking the first supplementary read
+        }
+	}
+	return 0;
+}
+
+int bundle::build_supplementaries()
+{
+	int max_index = hits.size() + 1;
+	if(max_index > 1000000) max_index = 1000000;
+
+	vector< vector<int> > vv;
+	vv.resize(max_index);
+
+	printf("hits size:%d\n",hits.size());
+
+	// first build index
+	for(int i = 0; i < hits.size(); i++)
+	{
+		const hit &h = hits[i];
+
+		if(h.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+		{
+			printf("E00512:127:HJNF3ALXX:3:1205:15453:12437 in build supple hits\n");
+		}
+
+		if(h.hid < 0) continue;
+		if((h.flag & 0x800) == 0) continue; //skip non supplementary
+
+		if(h.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+		{
+			printf("E00512:127:HJNF3ALXX:3:1205:15453:12437 pushed in vv\n");
+		}
+
+		int k = (h.get_qhash() % max_index + (h.flag & 0x40) + (h.flag & 0x80)) % max_index;
+
+		if(h.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+		{
+			printf("E00512:127:HJNF3ALXX:3:1205:15453:12437 supplementary hash:%d\n", k);
+			printf("h.qhash:%d, (h.flag & 0x40):%d, (h.flag & 0x80):%d, max_index:%d\n", h.get_qhash(), h.flag & 0x40, h.flag & 0x80, max_index);
+		}
+
+		vv[k].push_back(i);
+	}
+
+	for(int i = 0; i < hits.size(); i++)
+	{
+		hit &h = hits[i];
+
+		if(h.hid < 0) continue;
+		if((h.flag & 0x800) >= 1) continue;  // skip supplemetary
+
+		int k = (h.get_qhash() % max_index + (h.flag & 0x40) + (h.flag & 0x80)) % max_index;
+
+		if(h.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+		{
+			printf("E00512:127:HJNF3ALXX:3:1205:15453:12437 primary hash:%d\n", k);
+			printf("h.qhash:%d, (h.flag & 0x40):%d, (h.flag & 0x80):%d, max_index:%d\n", h.get_qhash(), h.flag & 0x40, h.flag & 0x80, max_index);
+		}
+
+		for(int j = 0; j < vv[k].size(); j++)
+        {
+            int u = vv[k][j];
+			hit &z = hits[u];
+
+			if(h.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+			{
+				printf("E00512:127:HJNF3ALXX:3:1205:15453:12437 found in vv\n");
+			}
+			
+            if(z.qname != h.qname) continue;
+			if(z.mpos != h.mpos) continue; //primary and supple both have same mpos (mate pos)
+
+            // TODO check 0x40 and 0x80 are the same for primary and supple
+            if(((z.flag & 0x40) != (h.flag & 0x40)) || ((z.flag & 0x80) != (h.flag & 0x80))) continue;
+			
+			if(h.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+			{
+				printf("E00512:127:HJNF3ALXX:3:1205:15453:12437 all conditions passed\n");
+			}
+
         	h.suppl = &z;
 			h.suppl_index = u;
         	break; //Taking the first supplementary read
         }
+	}
+	return 0;
+}
+
+int bundle::build_fake_circ_fragments()
+{
+	int max_index = hits.size() + 1;
+	if(max_index > 1000000) max_index = 1000000;
+
+	vector< vector<int> > vv;
+	vv.resize(max_index);
+
+	for(int i = 0; i < hits.size(); i++)
+	{
+		const hit &h = hits[i];
+		if(h.hid < 0) continue;
+		if((h.flag & 0x800) == 0) continue; //skip non supplementary
+		if(h.is_fake == false) continue; //skip non fake
+
+		int k = (h.get_qhash() % max_index + h.mpos % max_index) % max_index;
+		vv[k].push_back(i);
+	}
+	for(int i = 0; i < frgs.size(); i++)
+	{
+		int idx1 = frgs[i][0];
+		int idx2 = frgs[i][1];
+		hit &h1 = hits[idx1];
+		hit &h2 = hits[idx2];
+
+		if(h1.has_fake_suppl != true && h2.has_fake_suppl != true) continue; //at least one of the two hits should have fake supple
+		printf("Fragment has fake supple, chr:%s, read1:%s, pos1:%d, read2:%s, pos2:%d\n",chrm.c_str(),h1.qname.c_str(),h1.pos,h2.qname.c_str(),h2.pos);
+		
+		int k = (h1.get_qhash() % max_index + h1.mpos % max_index) % max_index;
+
+		for(int j=0;j<vv[k].size();j++)
+		{
+			int u = vv[k][j];
+			hit &z = hits[u];
+			if(h1.has_fake_suppl == true && z.is_fake == true)
+			{
+				if(z.qname != h1.qname) continue;
+				if(z.mpos != h1.mpos) continue; //primary and supple both have same mpos (mate pos)
+				if(z.soft_clip_side != h1.soft_clip_side) continue; //primary and supple both have same soft clip side
+				h1.suppl = &z;
+				h1.suppl_index = u;
+				circ_frgs.push_back(AI3({idx2, u, 0}));
+				printf("fake supple fragment created for h1, chr:%s, read:%s, pos:%d\n",chrm.c_str(),h1.qname.c_str(),h1.pos);
+				break; //taking the first match
+			}
+			else if(h2.has_fake_suppl == true && z.is_fake == true)
+			{
+				if(z.qname != h2.qname) continue;
+				if(z.mpos != h2.mpos) continue; //primary and supple both have same mpos (mate pos)
+				if(z.soft_clip_side != h2.soft_clip_side) continue; //primary and supple both have same soft clip side
+				h2.suppl = &z;
+				h2.suppl_index = u;
+				circ_frgs.push_back(AI3({u, idx1, 0}));
+				printf("fake supple fragment created for h2, chr:%s, read:%s, pos:%d\n",chrm.c_str(),h2.qname.c_str(),h2.pos);
+				break; //taking the first match
+			}			
+		}
 	}
 	return 0;
 }
@@ -514,11 +1009,18 @@ int bundle::bridge_circ_optimized()
 	for(int k = 0; k < vc.size(); k++)
 	{
 		if(vc[k].is_circ == false) continue;
-		if(hits[circ_frgs[vc[k].frlist[0]][0]].qname == "E00512:127:HJNF3ALXX:1:1105:24403:29630" && bs.opt[k].type <= 0)
+		if(vc[k].is_fake_circ == true)
 		{
-			printf("E00512:127:HJNF3ALXX:1:1105:24403:29630 path type negative\n");
+			printf("fake circRNA candidate read entered bridge circ:%s\n",hits[circ_frgs[vc[k].frlist[0]][0]].qname.c_str());
 		}
+
 		if(bs.opt[k].type <= 0) continue;
+
+		if(vc[k].is_fake_circ == true)
+		{
+			printf("fake circRNA candidate read bridge path not negative:%s\n",hits[circ_frgs[vc[k].frlist[0]][0]].qname.c_str());
+		}
+
 		non_empty_chain_vc_circ_count += 1;
 		bridge_cnt += update_bridges_circ(vc[k].frlist, bs.opt[k].chain, bs.opt[k].strand);
 	}
@@ -553,7 +1055,10 @@ int bundle::bridge_circ_optimized()
 	for(int i = 0; i < vc.size(); i++)
 	{
 		pereads_cluster vc_circ = vc[i]; //one frag in each cluster
+
 		if(vc_circ.is_circ == false) continue;
+
+		assert(vc_circ.frlist.size() > 0);
 
 		int circ_hit1_index = circ_frgs[vc_circ.frlist[0]][0];
 		int circ_hit2_index = circ_frgs[vc_circ.frlist[0]][1];
@@ -561,11 +1066,16 @@ int bundle::bridge_circ_optimized()
 		hit &circ_h1 = hits[circ_hit1_index];
 		hit &circ_h2 = hits[circ_hit2_index];
 
+		if(circ_h1.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+		{
+			printf("circRNA candidate read entered join circ frags:%s\n",circ_h1.qname.c_str());
+		}
+
 		vector<int32_t> vc_circ_bridge_chain = bs.opt[i].chain; //chain index and vc index corr to same peread and its bridged chain
 
-		if((circ_h2.flag & 0x800) >= 1) //reg h1 has suppl part, as circ frag h2 has suppl not null
+		if((circ_h2.is_fake == false && (circ_h2.flag & 0x800) >= 1) || circ_h2.is_fake == true) //reg h1 has suppl part, as circ frag h2 has suppl not null
 		{
-			string circ_h2_suppl_qname = hits[circ_hit2_index].qname; 
+			string circ_h2_suppl_qname = circ_h2.qname; 
 
 			auto it1 = reg_index.find(circ_h2_suppl_qname);
 			if(it1 != reg_index.end())
@@ -582,8 +1092,19 @@ int bundle::bridge_circ_optimized()
 				hit &h1 = hits[reg_hit1_index];
 				hit &h2 = hits[reg_hit2_index];
 
-				assert(h1.qname == h1.suppl->qname);
-				assert(h1.suppl->hid == circ_h2.hid);
+				assert(h1.suppl != NULL);
+				
+				if(h1.qname != h1.suppl->qname) continue;
+				if(h1.mpos != h1.suppl->mpos) continue;
+				if(h1.soft_clip_side != h1.suppl->soft_clip_side) continue;
+				if(h1.suppl_index != circ_hit2_index) continue;
+				if(h1.suppl->hid != circ_h2.hid) continue;
+				if(h1.has_fake_suppl !=  h1.suppl->is_fake) continue;
+
+				if(h1.has_fake_suppl == true && h1.suppl->is_fake == true)
+				{
+					printf("joined circRNA H1 supple is fake, read %s\n",h1.qname.c_str());
+				}
 
 				printf("joined circRNA H1 has supple:\n");
 				h1.print();
@@ -607,6 +1128,7 @@ int bundle::bridge_circ_optimized()
 				circ.end = h1.suppl->rpos;
 				circ.id = chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
 				circ.source = "circMeta";
+				if(h1.suppl->is_fake == true) circ.source = "circMeta_new";
 				circ.feature = "circRNA";
 				circ.score = 1;
 				circ.coverage = 1;
@@ -654,9 +1176,9 @@ int bundle::bridge_circ_optimized()
 			}
 		}
 
-		else if((circ_h1.flag & 0x800) >= 1) //reg h2 has suppl part, as circ frag h1 has suppl not null
+		else if((circ_h1.is_fake == false && (circ_h1.flag & 0x800) >= 1) || circ_h1.is_fake == true) //reg h2 has suppl part, as circ frag h1 has suppl not null
 		{
-			string circ_h1_suppl_qname = hits[circ_hit1_index].qname; 
+			string circ_h1_suppl_qname = circ_h1.qname; 
 
 			auto it2 = reg_index.find(circ_h1_suppl_qname);
 			if(it2 != reg_index.end())
@@ -673,8 +1195,19 @@ int bundle::bridge_circ_optimized()
 				hit &h1 = hits[reg_hit1_index];
 				hit &h2 = hits[reg_hit2_index];
 
-				assert(h2.qname == h2.suppl->qname);
-				assert(h2.suppl->hid == circ_h1.hid);
+				assert(h2.suppl != NULL);
+
+				if(h2.qname != h2.suppl->qname) continue;
+				if(h2.mpos != h2.suppl->mpos) continue;
+				if(h2.soft_clip_side != h2.suppl->soft_clip_side) continue;
+				if(h2.suppl_index != circ_hit1_index) continue;
+				if(h2.suppl->hid != circ_h1.hid) continue;
+				if(h2.has_fake_suppl != h2.suppl->is_fake) continue;
+
+				if(h2.has_fake_suppl == true && h2.suppl->is_fake == true)
+				{
+					printf("joined circRNA H2 supple is fake, read %s\n",h2.qname.c_str());
+				}
 
 				printf("joined circRNA H2 has supple:\n");
 				h2.suppl->print();
@@ -706,6 +1239,7 @@ int bundle::bridge_circ_optimized()
 				circ.end = h2.rpos;
 				circ.id = chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
 				circ.source = "circMeta";
+				if(h2.suppl->is_fake == true) circ.source = "circMeta_new";
 				circ.feature = "circRNA";
 				circ.score = 1;
 				circ.coverage = 1;

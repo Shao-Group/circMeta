@@ -16,6 +16,10 @@ See LICENSE for licensing.
 #include "bundle_base.h"
 #include "sample_profile.h"
 #include "circular_transcript.h"
+#include "region.h"
+#include "htslib/faidx.h"
+#include "graph_builder.h"
+#include <mutex>
 
 using namespace std;
 
@@ -44,12 +48,19 @@ public:
 	int print(int k);
 	int bridge();
 	
+	int set_supplementaries();
 	int build_supplementaries(); 		// setting hit supple
+	int get_more_chimeric_reads(faidx_t *fai);	// for getting more chimeric reads for junction mapping and creating fake supplementaries
+	int build_fake_circ_fragments();
 	int set_chimeric_cigar_positions(); //setting h.first_pos/second_pos etc for getting back splice positions using cigars
 	int build_circ_fragments();	//for building r2 and r1.supple frags
 	int fix_alignment_boundaries();
 	int bridge_circ(); //bridging regular and circ fragments for circrna
 	int bridge_circ_optimized();
+	int create_fake_supple(int fr_index, int32_t soft_len, int32_t pos1, int32_t pos2, int soft_clip_side);
+	string get_fasta_seq(faidx_t *fai, int32_t pos1, int32_t pos2);
+	double get_Jaccard(string s, string t);
+	double get_Jaccard_correct(string s, string t);
 };
 
 #endif

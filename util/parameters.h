@@ -109,8 +109,11 @@ public:
 
 	//for circRNA
 	int read_length;
-	int alignment_boundary_error;
-	string fasta_file;
+	int alignment_boundary_error; // maximum allowed error for adjusting alignment boundaries
+	string fasta_file; // reference fasta file for mapping soft clip to genome
+	int min_soft_clip_len; // minimum softclip length for considering mapping
+	int max_softclip_to_junction_gap; // max distance from softclip to junction for considering mapping
+	double min_jaccard = 0.9; //mapping jaccard min threshold
 
 public:
 	int print_command_line(int argc, const char ** argv);

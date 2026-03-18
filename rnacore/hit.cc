@@ -14,6 +14,39 @@ See LICENSE for licensing.
 #include "util.h"
 #include "constants.h"
 
+hit::hit()
+{
+	hid = 0;
+	rpos = 0;
+	nh = 0;
+	hi = 0;
+	nm = 0;
+	strand = '.';
+	xs = '.';
+	ts = '.';
+	qname = "";
+
+	suppl = NULL;
+	suppl_index = -1;
+	cigar_vector.clear();
+	left_cigar = '.';					
+	right_cigar = '.';					
+	left_cigar_len = 0;
+	right_cigar_len = 0;
+	first_pos = 0;						
+	second_pos = 0;
+	third_pos = 0;
+
+	seq = "";
+	soft_left_clip_seqs.clear();
+	soft_right_clip_seqs.clear();
+	is_fake = false;
+	fake_hit_index = -1;
+	soft_clip_side = 0;
+	has_fake_suppl = false;
+	has_chimeric_suppl = false;
+}
+
 hit& hit::operator=(const hit &h)
 {
 	bam1_core_t::operator=(h);
@@ -38,6 +71,14 @@ hit& hit::operator=(const hit &h)
 	first_pos = h.first_pos;
 	second_pos = h.second_pos;
 	third_pos = h.third_pos;
+	seq  = h.seq;
+	soft_left_clip_seqs = h.soft_left_clip_seqs;
+	soft_right_clip_seqs = h.soft_right_clip_seqs;
+	is_fake = h.is_fake;
+	fake_hit_index = h.fake_hit_index;
+	soft_clip_side = h.soft_clip_side;
+	has_fake_suppl = h.has_fake_suppl;
+	has_chimeric_suppl = h.has_chimeric_suppl;
 
 	return *this;
 }
@@ -66,6 +107,14 @@ hit::hit(const hit &h)
 	first_pos = h.first_pos;
 	second_pos = h.second_pos;
 	third_pos = h.third_pos;
+	seq  = h.seq;
+	soft_left_clip_seqs = h.soft_left_clip_seqs;
+	soft_right_clip_seqs = h.soft_right_clip_seqs;
+	is_fake = h.is_fake;
+	fake_hit_index = h.fake_hit_index;
+	soft_clip_side = h.soft_clip_side;
+	has_fake_suppl = h.has_fake_suppl;
+	has_chimeric_suppl = h.has_chimeric_suppl;
 }
 
 hit::~hit()
@@ -95,6 +144,14 @@ hit::hit(bam1_t *b, int id)
 	first_pos = 0;
 	second_pos = 0;
 	third_pos = 0;
+	seq = "";
+	soft_left_clip_seqs.clear();
+	soft_right_clip_seqs.clear();
+	is_fake = false;
+	fake_hit_index = -1;
+	soft_clip_side = 0;
+	has_fake_suppl = false;
+	has_chimeric_suppl = false;
 
 	int max_num_cigar = 10000; // TODO use from paemeters.h
 	assert(n_cigar <= max_num_cigar);
@@ -139,6 +196,137 @@ hit::hit(bam1_t *b, int id)
 	{
 		cigar_vector.push_back(pair<char, int32_t>('.',0));
 	}
+
+	if(cigar_vector[0].first == 'S' || cigar_vector[cigar_vector.size()-1].first == 'S')
+	{
+		set_seq(b);
+	}
+}
+
+int hit::set_seq(bam1_t *b)
+{
+	uint32_t seq_len = b->core.l_qseq;
+	l_qseq = seq_len;
+	uint8_t *q = bam_get_seq(b); 
+	vector<int> code;
+
+	for(int i=0;i<seq_len;i++)
+	{
+		code.push_back(bam_seqi(q,i)); //gets nucleotide id
+	}
+
+	string hit_seq = convert_to_IUPAC(code);
+	seq = hit_seq;
+
+	set_soft_clip_seq_combo();
+
+	return 0;
+}
+
+string hit::convert_to_IUPAC(vector<int> code)
+{
+	string seq = "";
+	for(int i=0;i<code.size();i++)
+	{
+		if(code[i] == 1)
+		{
+			seq = seq + 'A';
+		}
+		else if(code[i] == 2)
+		{
+			seq = seq + 'C';
+		}
+		else if(code[i] == 4)
+		{
+			seq = seq + 'G';
+		}
+		else if(code[i] == 8)
+		{
+			seq = seq + 'T';
+		}
+		else if(code[i] == 15)
+		{
+			seq = seq + 'N';
+		}
+	}
+
+	return seq;
+}
+
+int hit::set_soft_clip_seq_combo()
+{
+	if(cigar_vector[0].first == 'S')
+	{
+		int32_t len = cigar_vector[0].second;
+		//index 0, extract start len bp
+		string str0 = "";
+		for(int i=1;i<len+1;i++)
+		{
+			str0 = str0 + seq[i];
+		}
+		soft_left_clip_seqs.push_back(str0);
+
+		//index 1, extract start len bp rev comp
+		soft_left_clip_seqs.push_back(get_reverse_complement(soft_left_clip_seqs[0]));
+	}
+	if(cigar_vector[cigar_vector.size()-1].first == 'S')
+	{
+		int32_t len = cigar_vector[cigar_vector.size()-1].second;
+
+		//index 0, extract end len bp
+		string str2 = "";
+		for(int i=seq.size()-len;i<seq.size();i++)
+		{
+			str2 = str2 + seq[i];
+		}
+		soft_right_clip_seqs.push_back(str2);
+
+		//index 1,extract end len bp rev comp
+		soft_right_clip_seqs.push_back(get_reverse_complement(soft_right_clip_seqs[0]));
+	}
+
+	// printf("Printing four combos for read:%s\n",qname.c_str());
+	// if(soft_left_clip_seqs.size() == 2)
+	// {
+	// 	printf("start: %s\n",soft_left_clip_seqs[0].c_str());
+	// 	printf("start RC: %s\n",soft_left_clip_seqs[1].c_str());
+	// }
+	// if(soft_right_clip_seqs.size() == 2)
+	// {
+	// 	printf("end: %s\n",soft_right_clip_seqs[0].c_str());
+	// 	printf("end RC: %s\n",soft_right_clip_seqs[1].c_str());
+	// }
+
+	return 0;
+}
+
+string hit::get_reverse_complement(string str)
+{
+	string out = "";
+	for(int i=str.size()-1;i>=0;i--)
+	{
+		if(str[i] == 'A')
+		{
+			out = out + 'T';
+		}
+		else if(str[i] == 'T')
+		{
+			out = out + 'A';
+		}
+		else if(str[i] == 'C')
+		{
+			out = out + 'G';
+		}
+		else if(str[i] == 'G')
+		{
+			out = out + 'C';
+		}
+		else if(str[i] == 'N')
+		{
+			out = out + str[i];
+		}
+	}
+	return out;
 }
 
 bool hit::contain_splices(bam1_t *b) const

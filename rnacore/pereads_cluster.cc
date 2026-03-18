@@ -15,6 +15,7 @@ pereads_cluster::pereads_cluster()
 	extend.assign(4, 0);
 	count = 0;
 	is_circ = false;
+	is_fake_circ = false;
 }
 
 int pereads_cluster::clear()
@@ -26,6 +27,7 @@ int pereads_cluster::clear()
 	frlist.clear();
 	count = 0;
 	is_circ = false;
+	is_fake_circ = false;
 	return 0;
 }
 

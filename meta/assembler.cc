@@ -47,12 +47,18 @@ int assembler::resolve_circ(vector<bundle*> gv)
 	for(int k = 0; k < gv.size(); k++)
 	{
 		gv[k]->build_fragments();
+		gv[k]->set_supplementaries();
+		gv[k]->get_more_chimeric_reads(fai);
 		gv[k]->build_supplementaries();
 		gv[k]->set_chimeric_cigar_positions();
 		gv[k]->print(k);
 		gv[k]->fix_alignment_boundaries();
 		gv[k]->build_circ_fragments();
+		gv[k]->build_fake_circ_fragments();
+		
 		gv[k]->bridge_circ_optimized();
+
+
 		mylock.lock();
 		// insert fully bridged circs
 		circ_trsts.insert(circ_trsts.end(), gv[k]->circ_trsts.begin(), gv[k]->circ_trsts.end());
@@ -1166,6 +1172,7 @@ int assembler::bridge_circ_optimized(vector<bundle*> gv)
 					circ.end = h1.suppl->rpos;
 					circ.id = bd.chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
 					circ.source = "circMeta_meta";
+					if(h1.suppl->is_fake == true) circ.source = "circMETA_meta_new";
 					circ.feature = "circRNA";
 					circ.score = 1;
 					circ.coverage = 1;
@@ -1279,6 +1286,7 @@ int assembler::bridge_circ_optimized(vector<bundle*> gv)
 					circ.end = h2.rpos;
 					circ.id = bd.chrm + ":" + tostring(circ.start) + "-" + tostring(circ.end);
 					circ.source = "circMeta_meta";
+					if(h2.suppl->is_fake == true) circ.source = "circMETA_meta_new";
 					circ.feature = "circRNA";
 					circ.score = 1;
 					circ.coverage = 1;

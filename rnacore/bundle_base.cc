@@ -82,6 +82,11 @@ int bundle_base::add_hit(const hit &ht)
 	// 	}
 	// }
 
+	if(ht.qname == "E00512:127:HJNF3ALXX:3:1205:15453:12437")
+	{
+		printf("E00512:127:HJNF3ALXX:3:1205:15453:12437 is stored in hits\n");
+	}
+
 	// store new hit
 	hits.push_back(ht);
 

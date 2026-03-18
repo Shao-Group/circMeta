@@ -37,7 +37,7 @@ public:
 	vector<circular_transcript> circ_trsts;
 	map<string, circular_transcript> all_unbridged_candidate_trsts;
 
-	//for circRNA
+	//reference for hit mapping
 	faidx_t *fai;
 
 public:

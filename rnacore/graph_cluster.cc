@@ -125,12 +125,17 @@ int graph_cluster::build_pereads_clusters_circ(vector<pereads_cluster> &vc_circ)
 		if(b1 == false || b2 == false)  continue;
 		if(v1.size() == 0 || v2.size() == 0) continue;
 
+		if(bd.hits[h1].is_fake == true || bd.hits[h2].is_fake == true)
+		{
+			printf("Fake circRNA read found in circ_frgs, qname:%s, chrm:%s, pos:%d, is_fake:%d\n", bd.hits[h1].qname.c_str(), bd.chrm.c_str(), bd.hits[h1].pos, bd.hits[h1].is_fake == true ? 1 : 0);
+		}
+
 		bd.circ_frgs[i][2] = 0;			// to be bridged
 
 		pereads_cluster pc;
 		pc.count = 1;
-		pc.chain1 = bd.hcst.get(h1).first;
-		pc.chain2 = bd.hcst.get(h2).first;
+		pc.chain1 = chain1;
+		pc.chain2 = chain2;
 		pc.bounds[0] = bd.hits[h1].pos;
 		pc.bounds[1] = bd.hits[h1].rpos;
 		pc.bounds[2] = bd.hits[h2].pos;
@@ -143,6 +148,11 @@ int graph_cluster::build_pereads_clusters_circ(vector<pereads_cluster> &vc_circ)
 		pc.hits2.push_back(bd.hits[h2]);
 		pc.is_circ = true;
 		pc.frlist.push_back(i); // index of circ_frags pushed
+
+		if(bd.hits[h1].is_fake == true || bd.hits[h2].is_fake == true)
+		{
+			pc.is_fake_circ = true;
+		}
 
 		vc_circ.push_back(pc);
 	}

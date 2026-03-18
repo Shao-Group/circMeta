@@ -67,6 +67,7 @@ typedef struct {
 class hit: public bam1_core_t
 {
 public:
+	hit();
 	hit(bam1_t *b, int id);
 	hit(const hit &h);
 	virtual ~hit();
@@ -97,6 +98,16 @@ public:
 	int32_t second_pos;
 	int32_t third_pos;
 
+	string seq;								// sequence information of the read except H clip
+	uint32_t l_qseq;						// length of sequence information of the read except H clip
+	vector<string> soft_left_clip_seqs;		// index 0:start seq,1:start seq rev comp
+	vector<string> soft_right_clip_seqs;	// index 0:ending seq,1:ending seq rev comp
+	bool is_fake;			
+	int fake_hit_index;						// stores frgs index for which this hit is a fake supple, -1 if not fake hit
+	int soft_clip_side;						// 0: no soft clip, 1: left soft clip, 2: right soft clip
+	bool has_fake_suppl;
+	bool has_chimeric_suppl;
+
 public:
 	int set_tags(bam1_t *b);
 	int set_strand(int lib_type);
@@ -108,6 +119,12 @@ public:
 	//int get_aligned_intervals(vector<int64_t> &v) const;
 	//size_t get_phash() const;
 	//bool equal(const hit &h) const;
+
+	// for junction mapping, store hit seq
+	int set_seq(bam1_t *b);
+	string convert_to_IUPAC(vector<int> code);
+	int set_soft_clip_seq_combo();
+	string get_reverse_complement(string str);
 };
 
 #endif

@@ -28,27 +28,6 @@ int graph_builder::build(splice_graph &gr)
 	build_regions();
 	build_partial_exons();
 	classify_partial_exons();
-
-	if(bd.chrm == "chr2")
-	{
-		for(int i=0;i<pexons.size();i++)
-		{
-			if(pexons[i].lpos >= 164291946 && pexons[i].lpos <= 164304556)
-			{
-				pexons[i].print(i+1);
-			}
-		}
-	}
-	if(bd.chrm == "chr8")
-	{
-		for(int i=0;i<pexons.size();i++)
-		{
-			if(pexons[i].rpos >= 19258624 && pexons[i].rpos <= 19260700)
-			{
-				pexons[i].print(i+1);
-			}
-		}
-	}
 	link_partial_exons();
 	build_splice_graph(gr);
 	refine_splice_graph(gr);
